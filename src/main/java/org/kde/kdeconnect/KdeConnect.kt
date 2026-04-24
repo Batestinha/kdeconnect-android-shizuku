@@ -5,6 +5,8 @@
  */
 package org.kde.kdeconnect
 
+import org.kde.kdeconnect.plugins.clipboard.ClipboardListener
+
 import android.app.Application
 import android.os.Build
 import android.os.StrictMode
@@ -49,6 +51,8 @@ class KdeConnect : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        ClipboardListener.instance(this)
         _instance = this
         setupSL4JLogging()
         Log.d("KdeConnect/Application", "onCreate")
