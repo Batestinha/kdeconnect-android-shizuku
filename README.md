@@ -1,4 +1,4 @@
-This release is based on current upstream KDE Connect Android 1.35.5 and builds on the earlier work from Shoukaku39’s kdeconnect-android-shizuku.
+This fork is based on current upstream KDE Connect Android 1.35.13 and builds on the earlier work from Shoukaku39’s kdeconnect-android-shizuku.
 
 What changed in this fork relative to that earlier Shizuku work:
 
