@@ -1,4 +1,4 @@
-This fork is based on current upstream KDE Connect Android 1.35.13 and builds on the earlier work from Shoukaku39’s kdeconnect-android-shizuku.
+This fork is based on KDE Connect Android 1.35.14 (upstream master `707f2e76`) and builds on the earlier work from Shoukaku39’s kdeconnect-android-shizuku.
 
 What changed in this fork relative to that earlier Shizuku work:
 
@@ -15,3 +15,25 @@ Credit to:
 
 KDE upstream for the base project
 Shoukaku39 for the original Shizuku-enabled fork this work builds on
+
+## 1.35.14 update
+
+Rebased the six fork commits onto KDE Connect upstream master `707f2e76`.
+This includes notification listener recovery and resynchronization fixes,
+media-session listener cleanup, the call-muting fix, and updated build dependencies.
+The Shizuku clipboard integration and READ_LOGS fallback are retained.
+
+## Build and download
+
+With a compatible JDK and Android SDK 37 installed, run:
+
+```sh
+./gradlew --no-daemon --console=plain assembleDebug lintDebug testDebugUnitTest
+```
+
+The APK is generated at `build/outputs/apk/debug/kdeconnect-android-debug.apk`.
+
+Download the APK and SHA-256 checksum from
+[GitHub Releases](https://github.com/Batestinha/kdeconnect-android-shizuku/releases).
+The published APK is the debug variant (`org.kde.kdeconnect_tp.debug`) and uses
+the repository's existing debug signing key, matching the previous debug build.
