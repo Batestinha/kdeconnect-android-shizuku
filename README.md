@@ -28,6 +28,11 @@ cleanup, the call-muting fix, and updated build dependencies.
 
 ## Downloads
 
+Version 1.35.14 introduces a new release signing key. Android requires uninstalling
+an earlier release signed with the old key before installing this APK. Uninstalling
+clears the app's local settings and pairings; pair your devices again after reinstalling.
+Future releases using the new key can update 1.35.14 normally.
+
 The code and release artifacts are published on both mirrors:
 
 - [Codeberg](https://codeberg.org/steadying/kdeconnect-android-shizuku/releases)
@@ -42,8 +47,8 @@ With a compatible JDK and Android SDK 37 installed, run:
 ```
 
 The release APK is generated under `build/outputs/apk/release/` and uses
-`org.kde.kdeconnect_tp`. It must be signed with the existing release key to update
-previous release installations.
+`org.kde.kdeconnect_tp`. Sign it with the release key introduced for 1.35.14 to keep future updates
+compatible with this release.
 
 The debug APK is generated at `build/outputs/apk/debug/kdeconnect-android-debug.apk`.
 It uses `org.kde.kdeconnect_tp.debug` and the repository's existing debug signing key.
