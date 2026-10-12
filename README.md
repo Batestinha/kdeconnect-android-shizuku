@@ -20,24 +20,25 @@ the app does not need READ_LOGS permission when the Shizuku service is used.
 Compared with the earlier Shizuku fork, this implementation uses a dedicated
 Shizuku user service and AIDL callbacks for privileged clipboard reads.
 
-## 1.36.0 source update
+## 1.36.0 release
 
 Upstream master `3c2706a1` is merged while preserving the Shizuku clipboard service
 and READ_LOGS fallback. This includes the 1.36.0 release, connection and pairing
 fixes, file-transfer and remote-input improvements, Kotlin migrations, and updated
-build dependencies. The published APK below remains the 1.35.14 release.
+build dependencies. The 1.36.0 APK uses the same signing key as 1.35.14 and can
+update that release in place.
 
 ## Downloads
 
-Version 1.35.14 introduces a new release signing key. Android requires uninstalling
+Version 1.35.14 introduced the release signing key also used by 1.36.0. Android requires uninstalling
 an earlier release signed with the old key before installing this APK. Uninstalling
 clears the app's local settings and pairings; pair your devices again after reinstalling.
 Future releases using the new key can update 1.35.14 normally.
 
-The code and release artifacts are published on both mirrors:
+[Download the signed 1.36.0 APK from GitHub](https://github.com/Batestinha/kdeconnect-android-shizuku/releases/tag/v1.36.0-shizuku-clipboard).
+Checksums and build information are included with the release.
 
-- [Codeberg](https://codeberg.org/steadying/kdeconnect-android-shizuku/releases)
-- [GitHub](https://github.com/Batestinha/kdeconnect-android-shizuku/releases)
+Earlier builds are also available on [Codeberg](https://codeberg.org/steadying/kdeconnect-android-shizuku/releases).
 
 ## Build
 
