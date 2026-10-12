@@ -6,21 +6,26 @@
 
 package org.kde.kdeconnect.plugins.remotekeyboard
 
+import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import android.view.KeyEvent
+import android.view.View
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityNodeInfo.FOCUS_INPUT
 import androidx.annotation.RequiresApi
 import androidx.fragment.app.DialogFragment
+import org.kde.kdeconnect.KdeConnectAccessibilityService
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
-import org.kde.kdeconnect.plugins.mousereceiver.MouseReceiverService
+import org.kde.kdeconnect.plugins.remotekeyboardime.RemoteKeyboardIMEPlugin
 import org.kde.kdeconnect.plugins.remotekeyboardime.RemoteKeyboardService
 import org.kde.kdeconnect.ui.MainActivity
 import org.kde.kdeconnect.ui.StartActivityAlertDialogFragment
@@ -68,31 +73,27 @@ class RemoteKeyboardPlugin : Plugin() {
         return enabledServices.any { enabledService ->
             val serviceInfo = enabledService.resolveInfo.serviceInfo
             serviceInfo.packageName == context.packageName &&
-                serviceInfo.name == MouseReceiverService::class.java.name
+                serviceInfo.name == KdeConnectAccessibilityService::class.java.name
         }
     }
 
-    override fun onCreate(): Boolean {
-        sendState()
-        return super.onCreate()
+    override fun onCreate() {
+        val np = NetworkPacket(PACKET_TYPE_MOUSEPAD_KEYBOARDSTATE)
+        np["state"] = true
+        device.sendPacket(np)
     }
 
     override fun onDestroy() {
+        if (device.getPlugin<RemoteKeyboardIMEPlugin>()?.isKeyboardAvailable == true) {
+            return
+        }
+
         val np = NetworkPacket(PACKET_TYPE_MOUSEPAD_KEYBOARDSTATE)
-        np.set("state", value = false)
+        np["state"] = false
         device.sendPacket(np)
-        super.onDestroy()
     }
 
     override fun onPacketReceived(np: NetworkPacket): Boolean {
-        if (np.type != PACKET_TYPE_MOUSEPAD_REQUEST) {
-            Log.e(
-                LOG_TAG,
-                "Invalid packet type for RemoteKeyboardPlugin: " + np.type
-            )
-            return false
-        }
-
         // Check if this package is for the Mouse Receiver
         if (!(np.has("key") || np.has("specialKey"))) {
             return false
@@ -144,14 +145,27 @@ class RemoteKeyboardPlugin : Plugin() {
             return false
         }
 
-        if (np.getBoolean("shift") || np.getBoolean("ctrl")) {
-            multiKey(
-                key, sKey, np.getBoolean("shift"), np.getBoolean("ctrl")
-            )
+        val focus = KdeConnectAccessibilityService.instance?.findFocus(FOCUS_INPUT)
+        if (focus == null) {
+            val specialKey = SpecialKeys.fromInt(sKey)
+            if (specialKey == SpecialKeys.TAB) {
+                KdeConnectAccessibilityService.instance?.findNodeByAction(
+                    KdeConnectAccessibilityService.instance?.rootInActiveWindow,
+                    AccessibilityNodeInfo.AccessibilityAction.ACTION_FOCUS
+                )?.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                return true
+            }
+            return false
+        }
+
+        val shift = np.getBoolean("shift")
+        val ctrl = np.getBoolean("ctrl")
+        if (shift || ctrl) {
+            multiKey(focus, key, sKey, shift, ctrl)
         } else if (sKey != 0) {
-            specialKey(sKey)
+            specialKey(focus, sKey)
         } else {
-            keyInput(key)
+            keyInput(focus, key)
         }
         return true
     }
@@ -165,117 +179,166 @@ class RemoteKeyboardPlugin : Plugin() {
     )
 
     private fun multiKey(
+        focus: AccessibilityNodeInfo,
         key: String,
         sKey: Int,
         shift: Boolean,
         ctrl: Boolean
     ) {
         val specialKey = SpecialKeys.fromInt(sKey)
-        val focus = RemoteKeyboardInputService.window?.findFocus(FOCUS_INPUT)
 
         if (shift) {
             val movement = if (ctrl) Movement.WORD else Movement.CHARACTER
             when (specialKey) {
+                SpecialKeys.TAB -> moveFocus(forward = false, focus)
+
                 SpecialKeys.DPAD_LEFT -> moveCursor(
+                    focus,
                     forward = false,
                     movement,
                     makeSelection = true
                 )
 
                 SpecialKeys.DPAD_RIGHT -> moveCursor(
+                    focus,
                     forward = true,
                     movement,
                     makeSelection = true
                 )
 
                 SpecialKeys.MOVE_HOME, SpecialKeys.DPAD_UP -> moveCursor(
+                    focus,
                     forward = false,
                     Movement.LINE,
                     makeSelection = true
                 )
 
                 SpecialKeys.MOVE_END, SpecialKeys.DPAD_DOWN -> moveCursor(
+                    focus,
                     forward = true,
                     Movement.LINE,
                     makeSelection = true
                 )
 
+                SpecialKeys.ENTER -> keyInput(focus, "\n")
+
                 // We already get the letters capitalized or as special characters.
-                SpecialKeys.NO_KEY -> keyInput(key)
+                SpecialKeys.NO_KEY -> keyInput(focus, key)
 
                 else -> {}
             }
         } else if (ctrl) {
             when (key) {
-                "c" -> focus?.performAction(AccessibilityNodeInfo.ACTION_COPY)
-                "v" -> focus?.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-                "x" -> focus?.performAction(AccessibilityNodeInfo.ACTION_CUT)
-                "a" -> focus?.setSelection(0, focus.text?.length ?: 0)
+                "c" -> focus.performAction(AccessibilityNodeInfo.ACTION_COPY)
+                "v" -> focus.performAction(AccessibilityNodeInfo.ACTION_PASTE)
+                "x" -> focus.performAction(AccessibilityNodeInfo.ACTION_CUT)
+                "a" -> focus.setSelection(0, focus.text?.length ?: 0)
             }
             when (specialKey) {
-                SpecialKeys.DPAD_LEFT -> moveCursor(forward = false, Movement.WORD)
-                SpecialKeys.DPAD_RIGHT -> moveCursor(forward = true, Movement.WORD)
-                SpecialKeys.DEL -> delete(forward = false, words = true)
-                SpecialKeys.FORWARD_DEL -> delete(forward = true, words = true)
+                SpecialKeys.DPAD_LEFT -> moveCursor(focus, forward = false, Movement.WORD)
+                SpecialKeys.DPAD_RIGHT -> moveCursor(focus, forward = true, Movement.WORD)
+                SpecialKeys.DEL -> delete(focus, forward = false, words = true)
+                SpecialKeys.FORWARD_DEL -> delete(focus, forward = true, words = true)
                 SpecialKeys.ENTER -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                        focus?.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+                    if (focus.isEditable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        focus.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+                    } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        KdeConnectAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DPAD_CENTER)
                     }
                 }
-
                 else -> {}
             }
         }
     }
 
-    private fun specialKey(sKey: Int) {
-        val focus = RemoteKeyboardInputService.window?.findFocus(FOCUS_INPUT)
+    private fun specialKey(focus: AccessibilityNodeInfo, sKey: Int) {
         val specialKey = SpecialKeys.fromInt(sKey)
 
         when (specialKey) {
-            SpecialKeys.DEL -> delete(false)
+            SpecialKeys.TAB -> moveFocus(forward = true, focus)
 
-            SpecialKeys.FORWARD_DEL -> delete(true)
+            SpecialKeys.DEL -> delete(focus, false)
 
-            SpecialKeys.MOVE_END -> moveCursor(forward = true, Movement.LINE)
+            SpecialKeys.FORWARD_DEL -> delete(focus, true)
 
-            SpecialKeys.MOVE_HOME -> moveCursor(forward = false, Movement.LINE)
+            SpecialKeys.MOVE_END -> moveCursor(focus, forward = true, Movement.LINE)
 
-            SpecialKeys.DPAD_UP -> moveCursor(forward = false, Movement.LINE)
+            SpecialKeys.MOVE_HOME -> moveCursor(focus, forward = false, Movement.LINE)
 
-            SpecialKeys.DPAD_DOWN -> moveCursor(forward = true, Movement.LINE)
-
-            SpecialKeys.DPAD_LEFT -> moveCursor(false)
-
-            SpecialKeys.DPAD_RIGHT -> moveCursor(true)
-
-
-            SpecialKeys.ENTER -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && focus?.isMultiLine == false) {
-                    focus.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
-                    return
-                }
-                keyInput("\n")
+            SpecialKeys.DPAD_LEFT -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                KdeConnectAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DPAD_LEFT)
+            } else {
+                moveCursor(focus, false)
             }
 
-            SpecialKeys.ESCAPE, SpecialKeys.TAB -> {
-                focus?.performAction(AccessibilityNodeInfo.ACTION_CLEAR_FOCUS)
+            SpecialKeys.DPAD_RIGHT -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                KdeConnectAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DPAD_RIGHT)
+            } else {
+                moveCursor(focus, true)
+            }
+
+            SpecialKeys.DPAD_UP -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                KdeConnectAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DPAD_UP)
+            } else {
+                moveCursor(focus, forward = false, Movement.LINE)
+            }
+
+            SpecialKeys.DPAD_DOWN -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                KdeConnectAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DPAD_DOWN)
+            } else {
+                moveCursor(focus, forward = true, Movement.LINE)
+            }
+
+            SpecialKeys.ENTER -> {
+                if (focus.isEditable && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    KdeConnectAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DPAD_CENTER)
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    focus.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
+                }
+            }
+
+            SpecialKeys.ESCAPE -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    KdeConnectAccessibilityService.instance?.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK)
+                } else {
+                    focus.performAction(AccessibilityNodeInfo.ACTION_CLEAR_FOCUS)
+                }
             }
 
             else -> {}
         }
     }
 
-    private fun keyInput(key: String) {
-        val focus = RemoteKeyboardInputService.window?.findFocus(FOCUS_INPUT)
+    private fun moveFocus(
+        forward: Boolean,
+        focus: AccessibilityNodeInfo
+    ) {
+        val direction = if (forward) View.FOCUS_FORWARD else View.FOCUS_BACKWARD
+        val next = focus.focusSearch(direction)
             ?: return
+        next.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+    }
+
+    private fun keyInput(focus: AccessibilityNodeInfo, key: String): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && focus.isEditable) {
+            val inputConnection = KdeConnectAccessibilityService.instance
+                ?.inputMethod?.currentInputConnection
+            if (inputConnection != null) {
+                // Use the editor's input pipeline instead of replacing the entire field.
+                inputConnection.commitText(key, 1, null)
+                return true
+            }
+        }
+
         val text = getFieldText(focus) ?: ""
         val arguments = Bundle()
         val selectionStart = focus.textSelectionStart
         val selectionEnd = focus.textSelectionEnd
+        val selectionFirst = minOf(selectionStart, selectionEnd).coerceIn(0, text.length)
+        val selectionLast = maxOf(selectionStart, selectionEnd).coerceIn(0, text.length)
 
-        val newTextPartOne = text.substring(0, selectionStart.coerceIn(0, text.length))
-        val newTextPartTwo = text.substring(selectionEnd.coerceIn(0, text.length))
+        val newTextPartOne = text.substring(0, selectionFirst)
+        val newTextPartTwo = text.substring(selectionLast)
         val newText = newTextPartOne + key + newTextPartTwo
 
         arguments.putCharSequence(
@@ -283,21 +346,37 @@ class RemoteKeyboardPlugin : Plugin() {
             newText
         )
 
-        focus.performAction(
+        val wasPerformed = focus.performAction(
             AccessibilityNodeInfo.ACTION_SET_TEXT,
             arguments
         )
-
-        if (text == "") {
-            return
+        if (!wasPerformed) {
+            return false
         }
 
-        moveCursorToPos(selectionStart + key.length, focus)
+        if (text != "") {
+            moveCursorToPos(selectionFirst + key.length, focus)
+        }
+
+        return true
     }
 
-    private fun delete(forward: Boolean, words: Boolean = false) {
-        val focus = RemoteKeyboardInputService.window?.findFocus(FOCUS_INPUT)
-            ?: return
+    private fun delete(focus: AccessibilityNodeInfo, forward: Boolean, words: Boolean = false) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && focus.isEditable) {
+            val inputConnection = KdeConnectAccessibilityService.instance
+                ?.inputMethod?.currentInputConnection
+            if (inputConnection != null) {
+                // Let the editor handle selections, word boundaries and multi-character glyphs.
+                val keyCode = if (forward) KeyEvent.KEYCODE_FORWARD_DEL else KeyEvent.KEYCODE_DEL
+                val metaState = if (words) KeyEvent.META_CTRL_ON else 0
+                val now = SystemClock.uptimeMillis()
+                val event = KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0, metaState)
+                inputConnection.sendKeyEvent(event)
+                inputConnection.sendKeyEvent(KeyEvent.changeAction(event, KeyEvent.ACTION_UP))
+                return
+            }
+        }
+
         val text = getFieldText(focus)
             ?: return
         val selectionStart = focus.textSelectionStart
@@ -383,11 +462,11 @@ class RemoteKeyboardPlugin : Plugin() {
     }
 
     private fun moveCursor(
+        focus: AccessibilityNodeInfo,
         forward: Boolean,
         movement: Movement = Movement.CHARACTER,
         makeSelection: Boolean = false
     ) {
-        val focus = RemoteKeyboardInputService.window?.findFocus(FOCUS_INPUT)
         val args = Bundle().apply {
             putInt(
                 AccessibilityNodeInfo.ACTION_ARGUMENT_MOVEMENT_GRANULARITY_INT,
@@ -403,7 +482,7 @@ class RemoteKeyboardPlugin : Plugin() {
             )
         }
 
-        focus?.performAction(
+        focus.performAction(
             if (forward) {
                 AccessibilityNodeInfo.AccessibilityAction.ACTION_NEXT_AT_MOVEMENT_GRANULARITY.id
             } else {
@@ -418,16 +497,6 @@ class RemoteKeyboardPlugin : Plugin() {
         // Fallback: some apps return hint as real text but report selection -1,-1
         if (focus.textSelectionStart == -1 && focus.textSelectionEnd == -1) return null
         return focus.text?.toString()
-    }
-
-    fun sendState() {
-        if (isDeviceInitialized) {
-            val np = NetworkPacket(PACKET_TYPE_MOUSEPAD_KEYBOARDSTATE)
-            np.set("state", value = checkRequiredPermissions())
-            device.sendPacket(np)
-        } else {
-            Log.d(LOG_TAG, "Not initialized")
-        }
     }
 
 }

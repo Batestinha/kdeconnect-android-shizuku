@@ -28,8 +28,8 @@ import android.service.notification.StatusBarNotification
 import android.text.TextUtils
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.graphics.createBitmap
 import androidx.fragment.app.DialogFragment
-import org.apache.commons.collections4.multimap.ArrayListValuedHashMap
 import org.json.JSONArray
 import org.json.JSONObject
 import org.kde.kdeconnect.NetworkPacket
@@ -43,17 +43,16 @@ import org.kde.kdeconnect_tp.R
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.Locale
-import androidx.core.graphics.createBitmap
 
 @LoadablePlugin
 class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener {
     private lateinit var appDatabase: AppDatabase
-    private val currentNotifications = mutableSetOf<String>()
+    private val currentNotifications = HashSet<String>()
     // Here we will map every notification to it's icon(hash)
-    private val notificationsIcons = mutableMapOf<String, String>()
-    private val postedNotifications = mutableSetOf<String>()
-    private val pendingIntents = mutableMapOf<String, RepliableNotification>()
-    private val pendingActions = ArrayListValuedHashMap<String, Notification.Action>()
+    private val notificationsIcons = HashMap<String, String>()
+    private val postedNotifications = HashSet<String>()
+    private val pendingIntents = HashMap<String, RepliableNotification>()
+    private val pendingActions = mutableMapOf<String, MutableList<Notification.Action>>()
     private var serviceReady = false
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var keyguardManager: KeyguardManager
@@ -79,7 +78,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
         return NotificationReceiver.hasReadNotificationsPermission(context)
     }
 
-    override fun onCreate(): Boolean {
+    override fun onCreate() {
         appDatabase = AppDatabase.getInstance(context)
         sharedPreferences = context.getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
         keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
@@ -88,7 +87,6 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
             service.addListener(this@NotificationsPlugin)
             serviceReady = service.isConnected
         }
-        return true
     }
 
     override fun onDestroy() {
@@ -107,19 +105,14 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
         }
     }
 
-    override fun onListenerConnected(service: NotificationReceiver?) {
+    override fun onListenerConnected(service: NotificationReceiver) {
         serviceReady = true
         NotificationReceiver.RunCommand(context) { service ->
             this.sendCurrentNotifications(service)
         }
     }
 
-    override fun onNotificationRemoved(statusBarNotification: StatusBarNotification?) {
-        if (statusBarNotification == null) {
-            Log.w(TAG, "onNotificationRemoved: notification is null")
-            return
-        }
-
+    override fun onNotificationRemoved(statusBarNotification: StatusBarNotification) {
         val id = getNotificationKeyCompat(statusBarNotification)
 
         synchronized(postedNotificationsLock) {
@@ -252,8 +245,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
 
         np["id"] = key
         np["isClearable"] = statusBarNotification.isClearable
-        val appName = appNameLookup(context, packageName)
-        np["appName"] = appName ?: packageName
+        np["appName"] = appNameLookup(context, packageName)
         np["time"] = statusBarNotification.postTime.toString()
         np["silent"] = isPreexisting
 
@@ -368,8 +360,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
 
             jsonArray.put(title.toString())
 
-            // A list is automatically created if it doesn't already exist.
-            pendingActions.put(key, action)
+            pendingActions.getOrPut(key) { mutableListOf() }.add(action)
         }
 
         return jsonArray
@@ -505,14 +496,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
         if (np.type == PACKET_TYPE_NOTIFICATION_ACTION) {
             val key = np.getString("key")
             val title = np.getString("action")
-            var intent: PendingIntent? = null
-
-            for (a in pendingActions.get(key)) {
-                if (a.title.contentEquals(title)) {
-                    intent = a.actionIntent
-                    break
-                }
-            }
+            val intent = pendingActions[key]?.firstOrNull { it.title?.contentEquals(title) == true }?.actionIntent
 
             if (intent != null) {
                 try {

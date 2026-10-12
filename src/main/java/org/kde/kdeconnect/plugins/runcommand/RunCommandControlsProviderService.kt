@@ -84,7 +84,7 @@ class RunCommandControlsProviderService : ControlsProviderService() {
             val commandEntry = getCommandByControlId(controlId)
             if (commandEntry != null) {
                 val deviceId = controlId.split(":")[0]
-                val plugin = KdeConnect.getInstance().getDevicePlugin(deviceId ,RunCommandPlugin::class.java)
+                val plugin = KdeConnect.getInstance().getDevicePlugin<RunCommandPlugin>(deviceId)
                 if (plugin != null) {
                     plugin.runCommand(commandEntry.key)
                     consumer.accept(ControlAction.RESPONSE_OK)
@@ -133,7 +133,7 @@ class RunCommandControlsProviderService : ControlsProviderService() {
                 continue
             }
 
-            val plugin = device.getPlugin(RunCommandPlugin::class.java)
+            val plugin = device.getPlugin<RunCommandPlugin>()
             if (plugin != null) {
                 for (jsonObject in plugin.commandList) {
                     try {
@@ -156,7 +156,7 @@ class RunCommandControlsProviderService : ControlsProviderService() {
         if (device == null || !device.isPaired) return null
 
         val commandList = if (device.isReachable) {
-            device.getPlugin(RunCommandPlugin::class.java)?.commandList?.map { jsonObject ->
+            device.getPlugin<RunCommandPlugin>()?.commandList?.map { jsonObject ->
                 CommandEntryWithDevice(jsonObject, device)
             }
         } else {
@@ -196,6 +196,9 @@ class RunCommandControlsProviderService : ControlsProviderService() {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .putExtra(MainActivity.EXTRA_DEVICE_ID, device?.deviceId)
 
-        return PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        // Use a request code unique to the device: extras are ignored when matching PendingIntents, so with a
+        // fixed one the controls of all devices would share the device id of the latest one
+        val requestCode = device?.deviceId.hashCode()
+        return PendingIntent.getActivity(this, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
 }

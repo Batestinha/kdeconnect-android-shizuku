@@ -16,51 +16,53 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.widget.Toast
-import androidx.annotation.WorkerThread
-import androidx.core.content.ContextCompat
 import androidx.core.content.LocusIdCompat
+import androidx.core.content.edit
+import androidx.core.content.getSystemService
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
+import androidx.core.net.toUri
 import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.async.BackgroundJob
 import org.kde.kdeconnect.async.BackgroundJobHandler
 import org.kde.kdeconnect.async.BackgroundJobHandler.Companion.newFixedThreadPoolBackgroundJobHandler
 import org.kde.kdeconnect.helpers.FilesHelper.uriToNetworkPacket
+import org.kde.kdeconnect.helpers.IntentHelper
 import org.kde.kdeconnect.helpers.IntentHelper.startActivityFromBackgroundOrCreateNotification
+import org.kde.kdeconnect.helpers.ThreadHelper
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect.ui.MainActivity
 import org.kde.kdeconnect.ui.PluginSettingsFragment
 import org.kde.kdeconnect_tp.R
-import androidx.core.content.edit
-import androidx.core.net.toUri
-import org.kde.kdeconnect.helpers.IntentHelper
-import org.kde.kdeconnect.helpers.ThreadHelper
 
 /**
  * A Plugin for sharing and receiving files and uris.
- * 
- * 
+ *
+ *
  * All of the associated I/O work is scheduled on background
  * threads by [BackgroundJobHandler].
- * 
+ *
  */
 @LoadablePlugin
 class SharePlugin : Plugin() {
     private val backgroundJobHandler: BackgroundJobHandler = newFixedThreadPoolBackgroundJobHandler(5)
     private val handler: Handler = Handler(Looper.getMainLooper())
-    private val receiveFileJobCallback: Callback = this.Callback()
+    private val receiveFileJobCallback: Callback = Callback()
     private var receiveFileJob: CompositeReceiveFileJob? = null
     private var uploadFileJob: CompositeUploadFileJob? = null
 
+    private inner class Callback : BackgroundJob.Callback<Unit> {
+        override fun onResult(job: BackgroundJob<*, *>, result: Unit) = jobDone(job)
+        override fun onError(job: BackgroundJob<*, *>, error: Throwable) = jobDone(job)
+    }
 
-    override fun onCreate(): Boolean {
+    override fun onCreate() {
         createOrUpdateDynamicShortcut()
         // Deliver URLs previously shared to this device now that it's connected
         deliverPreviouslySentIntents()
-        return true
     }
 
     override fun onDestroy() {
@@ -74,7 +76,6 @@ class SharePlugin : Plugin() {
                 ShortcutManagerCompat.removeLongLivedShortcuts(context,listOf(shortcut.id))
             }
         }
-        super.onDestroy()
     }
 
     private fun createOrUpdateDynamicShortcut(shortcutToUpdate: ShortcutInfoCompat? = null) {
@@ -154,14 +155,13 @@ class SharePlugin : Plugin() {
                 R.drawable.share_plugin_action_24dp
             ) { parentActivity: Activity ->
                 val intent = Intent(parentActivity, SendFileActivity::class.java)
-                intent.putExtra("deviceId", device.deviceId)
+                intent.putExtra(SendFileActivity.EXTRA_DEVICE_ID, device.deviceId)
                 parentActivity.startActivity(intent)
             })
     }
 
     override fun hasSettings(): Boolean = true
 
-    @WorkerThread
     override fun onPacketReceived(np: NetworkPacket): Boolean {
         try {
             if (np.type == PACKET_TYPE_SHARE_REQUEST_UPDATE) {
@@ -195,34 +195,37 @@ class SharePlugin : Plugin() {
     }
 
     private fun receiveText(np: NetworkPacket) {
-        val cm = ContextCompat.getSystemService(context, ClipboardManager::class.java)!!
+        val cm = context.getSystemService<ClipboardManager>()!!
         cm.text = np.getString("text")
         handler.post {
             Toast.makeText(context, R.string.shareplugin_text_saved, Toast.LENGTH_LONG).show()
         }
     }
 
-    @WorkerThread
     private fun receiveFile(np: NetworkPacket) {
         val hasNumberOfFiles = np.has(KEY_NUMBER_OF_FILES)
         val isOpen = np.getBoolean("open", false)
-
-        val job = receiveFileJob?.takeIf { hasNumberOfFiles && !isOpen }
-            ?: CompositeReceiveFileJob(device, receiveFileJobCallback)
+        // Only one batch receive job (`receiveFileJob`) runs at a time, and all new files are added to it
+        // The exceptions are packets from older clients that don't set KEY_NUMBER_OF_FILES, or packets with `open` set to true
+        val canAddToBatch = hasNumberOfFiles && !isOpen
 
         if (!hasNumberOfFiles) {
             np[KEY_NUMBER_OF_FILES] = 1
             np[KEY_TOTAL_PAYLOAD_SIZE] = np.payloadSize
         }
 
-        job.addNetworkPacket(np)
-
-        if (job !== receiveFileJob) {
-            if (hasNumberOfFiles && !isOpen) {
-                receiveFileJob = job
-            }
-            backgroundJobHandler.runJob(job)
+        // If there's an existing batch, try adding the packet to it
+        if (canAddToBatch && receiveFileJob?.addNetworkPacket(np) == true) {
+            // If the current job can accept the packets, we are done
+            return
         }
+
+        val job = CompositeReceiveFileJob(device, receiveFileJobCallback)
+        job.addNetworkPacket(np)
+        if (canAddToBatch) {
+            receiveFileJob = job
+        }
+        backgroundJobHandler.runJob(job)
     }
 
     fun sendUrls(urls: List<String>) {
@@ -240,22 +243,23 @@ class SharePlugin : Plugin() {
     }
 
     fun sendFiles(uriList: List<Uri>) {
-        val job = uploadFileJob ?:
-        CompositeUploadFileJob(device, this.receiveFileJobCallback)
-
         //Read all the data early, as we only have permissions to do it while the activity is alive
-        for (uri in uriList) {
-            val np = uriToNetworkPacket(context, uri, PACKET_TYPE_SHARE_REQUEST)
+        val packets = uriList.mapNotNull { uriToNetworkPacket(context, it, PACKET_TYPE_SHARE_REQUEST) }
 
-            if (np != null) {
-                job.addNetworkPacket(np)
-            }
+        if (packets.isEmpty()) {
+            return
         }
 
-        if (job !== uploadFileJob) {
-            uploadFileJob = job
-            backgroundJobHandler.runJob(job)
+        // If there's an existing batch, try adding the packets to it
+        if (uploadFileJob?.addNetworkPackets(packets) == true) {
+            // If the current job can accept the packets, we are done
+            return
         }
+
+        val job = CompositeUploadFileJob(device, receiveFileJobCallback)
+        job.addNetworkPackets(packets)
+        uploadFileJob = job
+        backgroundJobHandler.runJob(job)
     }
 
     fun share(intent: Intent) {
@@ -280,8 +284,9 @@ class SharePlugin : Plugin() {
         Log.e(TAG, "There's nothing we know how to share")
     }
 
-    override fun getSettingsFragment(activity: Activity): PluginSettingsFragment =
-        ShareSettingsFragment.newInstance(pluginKey, R.xml.shareplugin_preferences)
+    override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
+        return ShareSettingsFragment.newInstance(pluginKey, device.deviceId, R.xml.shareplugin_preferences)
+    }
 
     override val supportedPacketTypes= arrayOf(
         PACKET_TYPE_SHARE_REQUEST,
@@ -305,11 +310,6 @@ class SharePlugin : Plugin() {
         } else if (job === uploadFileJob) {
             uploadFileJob = null
         }
-    }
-
-    private inner class Callback : BackgroundJob.Callback<Void?> {
-        override fun onResult(job: BackgroundJob<*, *>, result: Void?) = jobDone(job)
-        override fun onError(job: BackgroundJob<*, *>, error: Throwable) = jobDone(job)
     }
 
     fun cancelJob(jobId: Long) {

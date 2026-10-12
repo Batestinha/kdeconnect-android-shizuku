@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2014 Albert Vaca Cintora <albertvaka@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect.plugins
 
 import android.app.Activity
@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.annotation.CallSuper
 import androidx.annotation.DrawableRes
+import androidx.annotation.EmptySuper
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.DialogFragment
@@ -30,16 +31,15 @@ abstract class Plugin {
     protected val isDeviceInitialized: Boolean
         get() = ::device.isInitialized
 
-    var preferences: SharedPreferences? = null
-        protected set
+    lateinit var preferences: SharedPreferences
+        private set
 
     fun setContext(context: Context, device: Device?) {
         this.context = context
 
         if (device != null) {
             this.device = device
-            this.preferences =
-                this.context.getSharedPreferences(this.sharedPreferencesName, Context.MODE_PRIVATE)
+            this.preferences = context.getSharedPreferences(this.sharedPreferencesName, Context.MODE_PRIVATE)
         }
     }
 
@@ -71,6 +71,7 @@ abstract class Plugin {
      * To receive the network packet from the unpaired device, override
      * listensToUnpairedDevices to return true and this method.
      */
+    @EmptySuper
     open fun onUnpairedDevicePacketReceived(np: NetworkPacket): Boolean {
         return false
     }
@@ -153,12 +154,10 @@ abstract class Plugin {
      *
      * If [isCompatible] or [checkRequiredPermissions] returns false, this
      * will *not* be called.
-     *
-     * @return true if initialization was successful, false otherwise
      */
-    open fun onCreate(): Boolean {
-        return true
-    }
+    @EmptySuper
+    @Throws(Exception::class)
+    open fun onCreate() {}
 
     /**
      * Finish any ongoing operations, remove listeners... so
@@ -166,6 +165,7 @@ abstract class Plugin {
      * called as well if onCreate threw an exception, so your plugin
      * could be not fully initialized.
      */
+    @EmptySuper
     open fun onDestroy() {}
 
     /**
@@ -173,6 +173,7 @@ abstract class Plugin {
      * By convention, we return true when we have done something in response to the packet or false otherwise,
      * even though that value is unused as of now.
      */
+    @EmptySuper
     open fun onPacketReceived(np: NetworkPacket): Boolean {
         return false
     }
@@ -255,12 +256,12 @@ abstract class Plugin {
 
     open fun loadPluginWhenRequiredPermissionsMissing(): Boolean = false
 
+    @EmptySuper
     open fun onDeviceUnpaired(context: Context, deviceId: String) {}
 
     open val minSdk: Int = Build.VERSION_CODES.BASE
 
     companion object {
-        @JvmStatic
         fun getPluginKey(p: Class<out Plugin>): String {
             return p.simpleName
         }

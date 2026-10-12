@@ -1,7 +1,7 @@
 # KDE Connect Android with Shizuku clipboard sync
 
-This unofficial fork is based on KDE Connect Android 1.35.14, including upstream
-master commit `707f2e76`, and builds on Shoukaku39's earlier Shizuku clipboard work.
+This unofficial fork is based on KDE Connect Android 1.36.0, including upstream
+master commit `3c2706a1`, and builds on Shoukaku39's earlier Shizuku clipboard work.
 
 ## What this fork adds to upstream
 
@@ -20,11 +20,12 @@ the app does not need READ_LOGS permission when the Shizuku service is used.
 Compared with the earlier Shizuku fork, this implementation uses a dedicated
 Shizuku user service and AIDL callbacks for privileged clipboard reads.
 
-## 1.35.14 update
+## 1.36.0 source update
 
-The fork patches are rebased onto upstream master `707f2e76`. This brings
-notification listener recovery and resynchronization fixes, media-session listener
-cleanup, the call-muting fix, and updated build dependencies.
+Upstream master `3c2706a1` is merged while preserving the Shizuku clipboard service
+and READ_LOGS fallback. This includes the 1.36.0 release, connection and pairing
+fixes, file-transfer and remote-input improvements, Kotlin migrations, and updated
+build dependencies. The published APK below remains the 1.35.14 release.
 
 ## Downloads
 

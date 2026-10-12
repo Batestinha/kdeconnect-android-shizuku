@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2024 ShellWen Chen <me@shellwen.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect.plugins.sftp
 
 import android.app.Activity
@@ -14,6 +14,7 @@ import android.net.Uri
 import android.os.Environment
 import android.os.storage.StorageManager
 import android.provider.Settings
+import androidx.core.content.getSystemService
 import androidx.core.net.toUri
 import org.json.JSONException
 import org.json.JSONObject
@@ -68,9 +69,15 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
                 .create()
         }
 
+    override fun onCreate() {
+        device.sendPacket(NetworkPacket(PACKET_TYPE_SFTP).apply {
+            this["serverRunning"] = false
+        })
+    }
+
     override fun onDestroy() {
         server.stop()
-        preferences?.unregisterOnSharedPreferenceChangeListener(this)
+        preferences.unregisterOnSharedPreferenceChangeListener(this)
     }
 
     override fun loadPluginWhenRequiredPermissionsMissing() = true
@@ -94,12 +101,11 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
         val pathNames = mutableListOf<String>()
 
         if (SimpleSftpServer.SUPPORTS_NATIVEFS) {
-            val volumes = context.getSystemService(
-                StorageManager::class.java
-            ).storageVolumes
-            for (sv in volumes) {
+            val storageManager = context.getSystemService<StorageManager>()!!
+            for (sv in storageManager.storageVolumes) {
+                val directory = sv.directory ?: continue
                 pathNames.add(sv.getDescription(context))
-                paths.add(sv.directory!!.path)
+                paths.add(directory.path)
             }
         } else {
             val storageInfoList = SftpSettingsFragment.getStorageInfoList(context, this)
@@ -119,12 +125,10 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
             return false
         }
 
-        if (preferences != null) {
-            preferences!!.registerOnSharedPreferenceChangeListener(this)
-        }
+        preferences.registerOnSharedPreferenceChangeListener(this)
 
         device.sendPacket(NetworkPacket(PACKET_TYPE_SFTP).apply {
-            this["ip"] = getLocalIpAddress()!!.hostAddress
+            this["ip"] = getLocalIpAddress()?.hostAddress!!
             this["port"] = server.port
             this["user"] = SimpleSftpServer.USER
             this["password"] = server.regeneratePassword()
@@ -154,8 +158,10 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
             if (prevInfo != null && curInfo.uri.toString().startsWith(prevInfo.uri.toString())) {
                 pathBuilder.append(prevInfo.displayName)
                 pathBuilder.append("/")
-                if (curInfo.uri.path != null && prevInfo.uri.path != null) {
-                    pathBuilder.append(curInfo.uri.path!!.substring(prevInfo.uri.path!!.length))
+                val curPath = curInfo.uri.path
+                val prevPath = prevInfo.uri.path
+                if (curPath != null && prevPath != null) {
+                    pathBuilder.append(curPath.substring(prevPath.length))
                 } else {
                     throw RuntimeException("curInfo.uri.getPath() or parentInfo.uri.getPath() returned null")
                 }
@@ -208,7 +214,7 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
     override fun supportsDeviceSpecificSettings(): Boolean = true
 
     override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
-        return SftpSettingsFragment.newInstance(pluginKey, R.xml.sftpplugin_preferences)
+        return SftpSettingsFragment.newInstance(pluginKey, device.deviceId, R.xml.sftpplugin_preferences)
     }
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences, key: String?) {
@@ -223,7 +229,7 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
         onPacketReceived(np)
     }
 
-    data class StorageInfo(@JvmField var displayName: String, @JvmField val uri: Uri) {
+    data class StorageInfo(var displayName: String, val uri: Uri) {
         val isFileUri: Boolean = uri.scheme == ContentResolver.SCHEME_FILE
         val isContentUri: Boolean = uri.scheme == ContentResolver.SCHEME_CONTENT
 
@@ -239,12 +245,10 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
             private const val KEY_DISPLAY_NAME = "DisplayName"
             private const val KEY_URI = "Uri"
 
-            @JvmStatic
             @Throws(JSONException::class)
-            fun fromJSON(jsonObject: JSONObject): StorageInfo { // TODO: Use Result after migrate callee to Kotlin
+            fun fromJSON(jsonObject: JSONObject): StorageInfo {
                 val displayName = jsonObject.getString(KEY_DISPLAY_NAME)
                 val uri = jsonObject.getString(KEY_URI).toUri()
-
                 return StorageInfo(displayName, uri)
             }
         }
@@ -254,7 +258,6 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
         private const val PACKET_TYPE_SFTP = "kdeconnect.sftp"
         private const val PACKET_TYPE_SFTP_REQUEST = "kdeconnect.sftp.request"
 
-        @JvmField
         val PREFERENCE_KEY_STORAGE_INFO_LIST: Int = R.string.sftp_preference_key_storage_info_list
 
         private val server = SimpleSftpServer()

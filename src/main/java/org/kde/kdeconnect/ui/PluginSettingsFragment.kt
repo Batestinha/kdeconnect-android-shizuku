@@ -20,12 +20,12 @@ open class PluginSettingsFragment : PreferenceFragmentCompat() {
 
     protected lateinit var device: Device
 
-    @JvmField
     protected var plugin: Plugin? = null
 
-    protected fun setArguments(pluginKey: String, vararg settingsLayouts: Int): Bundle {
+    protected fun setArguments(pluginKey: String, deviceId: String, vararg settingsLayouts: Int): Bundle {
         val args = Bundle()
         args.putString(ARG_PLUGIN_KEY, pluginKey)
+        args.putString(ARG_DEVICE_ID, deviceId)
         args.putIntArray(ARG_LAYOUT, settingsLayouts)
         setArguments(args)
         return args
@@ -34,18 +34,18 @@ open class PluginSettingsFragment : PreferenceFragmentCompat() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val arguments = requireArguments()
         if (!arguments.containsKey(ARG_PLUGIN_KEY)) {
-            throw RuntimeException("You must provide a pluginKey by calling setArguments(@NonNull String pluginKey)")
+            throw RuntimeException("You must provide a pluginKey by calling setArguments()")
         }
-        val pluginKey = arguments.getString(ARG_PLUGIN_KEY)!!
-        this.pluginKey = pluginKey
+        this.pluginKey = arguments.getString(ARG_PLUGIN_KEY)!!
         this.layouts = arguments.getIntArray(ARG_LAYOUT)!!
-        val device = getInstance().getDevice(this.deviceId)
+        val deviceId = requireArguments().getString(ARG_DEVICE_ID)!!
+        val device = getInstance().getDevice(deviceId)
         if (device == null) {
             requireActivity().finish()
-            return
+        } else {
+            this.device = device
+            this.plugin = device.getPluginIncludingWithoutPermissions(pluginKey)
         }
-        this.device = device
-        this.plugin = device.getPluginIncludingWithoutPermissions(pluginKey)
         super.onCreate(savedInstanceState)
     }
 
@@ -69,17 +69,14 @@ open class PluginSettingsFragment : PreferenceFragmentCompat() {
         requireActivity().title = getString(R.string.plugin_settings_with_name, info.displayName)
     }
 
-    val deviceId: String?
-        get() = PluginSettingsActivity.settingsDeviceId
-
     companion object {
         private const val ARG_PLUGIN_KEY = "plugin_key"
         private const val ARG_LAYOUT = "layout"
+        private const val ARG_DEVICE_ID = "device_id"
 
-        @JvmStatic
-        fun newInstance(pluginKey: String, vararg settingsLayout: Int): PluginSettingsFragment {
+        fun newInstance(pluginKey: String, deviceId: String, vararg settingsLayout: Int): PluginSettingsFragment {
             val fragment = PluginSettingsFragment()
-            fragment.setArguments(pluginKey, *settingsLayout)
+            fragment.setArguments(pluginKey, deviceId, *settingsLayout)
             return fragment
         }
     }

@@ -7,8 +7,6 @@
 package org.kde.kdeconnect.ui.compose.screen.device
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.kde.kdeconnect.extensions.safeDrawingBottomPadding
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.clipboard.ClipboardPlugin
 import org.kde.kdeconnect.plugins.mpris.MprisPlugin
@@ -73,12 +74,14 @@ private fun PluginsScreenContent(
     actionNeedPermissions: (plugin: Plugin) -> Unit,
     actionNeedOptionalPermissions: (plugin: Plugin) -> Unit,
 ) {
+    val bottomPadding = safeDrawingBottomPadding().calculateBottomPadding()
+
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(state = rememberScrollState())
-                .padding(top = 16.dp)
+                .padding(top = 16.dp, bottom = bottomPadding)
         ) {
             val numColumns = LocalResources.current.getInteger(R.integer.plugins_columns)
 

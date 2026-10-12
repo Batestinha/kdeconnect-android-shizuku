@@ -16,19 +16,19 @@ import androidx.appcompat.app.ActionBar
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.edit
 import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.BackgroundService
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.base.BaseActivity
+import org.kde.kdeconnect.helpers.IntentHelper
 import org.kde.kdeconnect.ui.compose.KdeTheme
 import org.kde.kdeconnect.ui.compose.extensions.device.toUiModel
 import org.kde.kdeconnect.ui.compose.model.device.DeviceUiModel
 import org.kde.kdeconnect.ui.compose.screen.share.ShareScreen
 import org.kde.kdeconnect_tp.R
 import org.kde.kdeconnect_tp.databinding.ActivityShareBinding
-import androidx.core.content.edit
-import org.kde.kdeconnect.helpers.IntentHelper
 
 class ShareActivity : BaseActivity<ActivityShareBinding>() {
 
@@ -95,8 +95,7 @@ class ShareActivity : BaseActivity<ActivityShareBinding>() {
                 Toast.makeText(this, getString(R.string.error_not_reachable), Toast.LENGTH_LONG).show()
             }
         } else {
-            val plugin = device.getPlugin(SharePlugin::class.java)
-            plugin?.share(intent)
+            device.getPlugin<SharePlugin>()?.share(intent)
         }
         finish()
     }
@@ -145,7 +144,7 @@ class ShareActivity : BaseActivity<ActivityShareBinding>() {
         super.onStart()
 
         val intent = intent
-        var deviceId = intent.getStringExtra("deviceId")
+        var deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && deviceId == null) {
             deviceId = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)
         }
@@ -167,6 +166,7 @@ class ShareActivity : BaseActivity<ActivityShareBinding>() {
     }
 
     companion object {
+        const val EXTRA_DEVICE_ID = "deviceId"
         private const val KEY_UNREACHABLE_URL_LIST = "key_unreachable_url_list"
     }
 }

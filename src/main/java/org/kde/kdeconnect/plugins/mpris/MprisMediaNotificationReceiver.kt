@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2017 Matthijs Tijink <matthijstijink@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect.plugins.mpris
 
 import android.content.BroadcastReceiver
@@ -27,7 +27,7 @@ class MprisMediaNotificationReceiver : BroadcastReceiver() {
             // Get the correct device, the mpris plugin and the mpris player
 
             val deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
-            val plugin = KdeConnect.getInstance().getDevicePlugin(deviceId, MprisPlugin::class.java) ?: return
+            val plugin = KdeConnect.getInstance().getDevicePlugin<MprisPlugin>(deviceId) ?: return
             val player = plugin.getPlayerStatus(intent.getStringExtra(EXTRA_MPRIS_PLAYER))
                 ?: return
 

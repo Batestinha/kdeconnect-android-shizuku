@@ -17,22 +17,20 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Network
 import android.os.Parcelable
-import android.preference.PreferenceManager
 import android.util.Base64
 import android.util.Log
 import androidx.core.content.edit
-import org.apache.commons.io.IOUtils
-import org.kde.kdeconnect.backends.BaseLinkProvider
+import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.DeviceInfo
-import org.kde.kdeconnect.DeviceInfo.Companion.fromIdentityPacketAndCert
-import org.kde.kdeconnect.helpers.DeviceHelper
-import org.kde.kdeconnect.helpers.security.SslHelper
-import org.kde.kdeconnect.helpers.ThreadHelper.execute
 import org.kde.kdeconnect.NetworkPacket
-import org.kde.kdeconnect.ui.SettingsFragment
+import org.kde.kdeconnect.backends.BaseLinkProvider
 import org.kde.kdeconnect.extensions.getParcelableArrayExtraCompat
 import org.kde.kdeconnect.extensions.getParcelableExtraCompat
+import org.kde.kdeconnect.helpers.DeviceHelper
+import org.kde.kdeconnect.helpers.ThreadHelper.execute
+import org.kde.kdeconnect.helpers.security.SslHelper
+import org.kde.kdeconnect.ui.SettingsFragment
 import java.io.IOException
 import java.io.InputStreamReader
 import java.io.Reader
@@ -106,13 +104,9 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
         serverRunnable!!.stopProcessing()
     }
 
-    override fun getName(): String {
-        return "BluetoothLinkProvider"
-    }
+    override val name: String = "BluetoothLinkProvider"
 
-    override fun getPriority(): Int {
-        return 10
-    }
+    override val priority: Int = 10
 
     fun disconnectedLink(link: BluetoothLink, remoteAddress: BluetoothDevice?) {
         Log.i("BluetoothLinkProvider", "disconnectedLink called")
@@ -127,7 +121,7 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
         fun stopProcessing() {
             continueProcessing = false
             try {
-                IOUtils.close(serverSocket)
+                serverSocket?.close()
             } catch (e: IOException) {
                 Log.e("KDEConnect", "Exception", e)
             }
@@ -216,7 +210,7 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
                             .replace("-----END CERTIFICATE-----\n", "")
                     val pemEncodedCertificateBytes = Base64.decode(base64CertificateString, 0)
                     val certificate = SslHelper.parseCertificate(pemEncodedCertificateBytes)
-                    val deviceInfo = fromIdentityPacketAndCert(identityPacket, certificate)
+                    val deviceInfo = DeviceInfo.fromIdentityPacketAndCert(identityPacket, certificate)
                     Log.i("BTLinkProvider/Server", "About to create link")
                     val link = BluetoothLink(context, connection,
                             inputStream, outputStream, socket.remoteDevice,
@@ -257,7 +251,7 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
                     Log.i("ClientRunnable", "after connectToDevices")
                     try {
                         Thread.sleep(15000)
-                    } catch (ignored: InterruptedException) {
+                    } catch (_: InterruptedException) {
                     }
                 }
                 Log.i("ClientRunnable", "unregisteringReceiver")
@@ -401,7 +395,7 @@ class BluetoothLinkProvider(private val context: Context) : BaseLinkProvider() {
 
                 val pemEncodedCertificateBytes = Base64.decode(base64CertificateString, 0)
                 val certificate = SslHelper.parseCertificate(pemEncodedCertificateBytes)
-                val deviceInfo = fromIdentityPacketAndCert(identityPacket, certificate)
+                val deviceInfo = DeviceInfo.fromIdentityPacketAndCert(identityPacket, certificate)
                 val link = BluetoothLink(context, connection, inputStream, outputStream,
                         socket.remoteDevice, deviceInfo, this@BluetoothLinkProvider)
 

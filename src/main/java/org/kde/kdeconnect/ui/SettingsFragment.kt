@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2023 Albert Vaca Cintora <albertvaka@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect.ui
 
 import android.Manifest
@@ -33,8 +33,8 @@ import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.apache.commons.io.IOUtils
 import org.kde.kdeconnect.BackgroundService
+import org.kde.kdeconnect.extensions.setupBottomPadding
 import org.kde.kdeconnect.helpers.CreateFileParams
 import org.kde.kdeconnect.helpers.CreateFileResultContract
 import org.kde.kdeconnect.helpers.DeviceHelper
@@ -42,10 +42,8 @@ import org.kde.kdeconnect.helpers.DeviceHelper.filterInvalidCharactersFromDevice
 import org.kde.kdeconnect.helpers.DeviceHelper.getDeviceName
 import org.kde.kdeconnect.helpers.NotificationHelper
 import org.kde.kdeconnect.ui.ThemeUtil.applyTheme
-import org.kde.kdeconnect.extensions.setupBottomPadding
 import org.kde.kdeconnect_tp.BuildConfig
 import org.kde.kdeconnect_tp.R
-import java.io.InputStreamReader
 
 class SettingsFragment : PreferenceFragmentCompat() {
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -196,7 +194,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
     private fun updateDevicesByIpSummary() {
         devicesByIpPref.setSummary(getString(
             R.string.custom_devices_settings_summary,
-            CustomDevicesActivity.getCustomDeviceList(context).size
+            CustomDevicesActivity.getCustomDeviceList(requireContext()).size
         ))
     }
 
@@ -235,17 +233,20 @@ class SettingsFragment : PreferenceFragmentCompat() {
     private val exportLogs: ActivityResultLauncher<CreateFileParams> = registerForActivityResult(
         CreateFileResultContract()
     ) { uri: Uri? ->
-        val output = uri?.let { context?.contentResolver?.openOutputStream(uri) } ?: return@registerForActivityResult
-        CoroutineScope(Dispatchers.IO).launch {
-            val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d"))
-            val reader = InputStreamReader(process.inputStream)
-            output.use {
-                it.write("KDE Connect ${BuildConfig.VERSION_NAME}\n".toByteArray(Charsets.UTF_8))
-                it.write("Android ${Build.VERSION.RELEASE} (${Build.MANUFACTURER} ${Build.MODEL})\n".toByteArray(Charsets.UTF_8))
-                IOUtils.copy(reader, it, Charsets.UTF_8)
+            val output = uri?.let { context?.contentResolver?.openOutputStream(it) }
+                ?: return@registerForActivityResult
+
+            CoroutineScope(Dispatchers.IO).launch {
+                val process = Runtime.getRuntime().exec(arrayOf("logcat", "-d"))
+                process.inputStream.reader(Charsets.UTF_8).use { reader ->
+                    output.writer(Charsets.UTF_8).use { writer ->
+                        writer.write("KDE Connect ${BuildConfig.VERSION_NAME}\n")
+                        writer.write("Android ${Build.VERSION.RELEASE} (${Build.MANUFACTURER} ${Build.MODEL})\n")
+                        reader.copyTo(writer)
+                    }
+                }
             }
         }
-    }
 
     private fun moreSettingsPref(context: Context) = Preference(context).apply {
         isPersistent = false

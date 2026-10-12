@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2015 David Edmundson <kde@davidedmundson.co.uk>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect.plugins.findmyphone
 
 import android.content.BroadcastReceiver
@@ -30,7 +30,7 @@ class FindMyPhoneReceiver : BroadcastReceiver() {
             return
         }
         val deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
-        val plugin = KdeConnect.getInstance().getDevicePlugin(deviceId, FindMyPhonePlugin::class.java) ?: return
+        val plugin = KdeConnect.getInstance().getDevicePlugin<FindMyPhonePlugin>(deviceId) ?: return
         plugin.stopPlaying()
         plugin.stopFlashing()
     }

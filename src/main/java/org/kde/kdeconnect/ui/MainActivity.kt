@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2023 Albert Vaca Cintora <albertvaka@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 
 package org.kde.kdeconnect.ui
 
@@ -21,6 +21,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -38,12 +39,11 @@ import com.google.android.material.navigation.NavigationView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.apache.commons.lang3.ArrayUtils
 import org.kde.kdeconnect.BackgroundService
 import org.kde.kdeconnect.Device
-import org.kde.kdeconnect.helpers.DeviceHelper
 import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.extensions.setOnApplyWindowInsetsListenerCompat
+import org.kde.kdeconnect.helpers.DeviceHelper
 import org.kde.kdeconnect.plugins.share.ShareSettingsFragment
 import org.kde.kdeconnect.ui.about.AboutFragment
 import org.kde.kdeconnect_tp.R
@@ -54,7 +54,6 @@ private const val MENU_ENTRY_SETTINGS = 2
 private const val MENU_ENTRY_ABOUT = 3
 private const val MENU_ENTRY_DEVICE_FIRST_ID = 1000 //All subsequent ids are devices in the menu
 private const val MENU_ENTRY_DEVICE_UNKNOWN = 9999 //It's still a device, but we don't know which one yet
-private const val STORAGE_LOCATION_CONFIGURED = 2020
 private const val STATE_SELECTED_MENU_ENTRY = "selected_entry" //Saved only in onSaveInstanceState
 private const val STATE_SELECTED_DEVICE = "selected_device" //Saved persistently in preferences
 
@@ -62,6 +61,12 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
     private val binding by lazy { ActivityMainBinding.inflate(layoutInflater) }
     private val mNavigationView: NavigationView by lazy { binding.navigationDrawer }
     private var mDrawerLayout: DrawerLayout? = null
+
+    private val openDocumentTreeLauncher = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            ShareSettingsFragment.saveStorageLocationPreference(this, uri)
+        }
+    }
 
     private lateinit var mNavViewDeviceName: TextView
 
@@ -324,11 +329,10 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
         super.onStop()
     }
 
-    @JvmOverloads
     fun onDeviceSelected(deviceId: String?, fromDeviceList: Boolean = false) {
         mCurrentDevice = deviceId
         preferences.edit { putString(STATE_SELECTED_DEVICE, deviceId) }
-        if (mCurrentDevice != null) {
+        if (deviceId != null) {
             mCurrentMenuEntry = deviceIdToMenuEntryId(deviceId)
             if (mCurrentMenuEntry == MENU_ENTRY_DEVICE_UNKNOWN) {
                 uncheckAllMenuItems(mNavigationView.menu)
@@ -364,28 +368,23 @@ class MainActivity : AppCompatActivity(), OnSharedPreferenceChangeListener {
                     KdeConnect.getInstance().devices.values.forEach(Device::reloadPluginsFromSettings)
                 }
             }
-            STORAGE_LOCATION_CONFIGURED if resultCode == RESULT_OK && data != null -> {
-                val uri = data.data
-                ShareSettingsFragment.saveStorageLocationPreference(this, uri)
-            }
             else -> super.onActivityResult(requestCode, resultCode, data)
         }
     }
 
     fun isPermissionGranted(permissions: Array<String>, grantResults: IntArray, permission : String) : Boolean {
-        val index = ArrayUtils.indexOf(permissions, permission)
-        return index != ArrayUtils.INDEX_NOT_FOUND && grantResults[index] == PERMISSION_GRANTED
+        val index = permissions.indexOf(permission)
+        return index != -1 && grantResults[index] == PERMISSION_GRANTED
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        val permissionsGranted = ArrayUtils.contains(grantResults, PERMISSION_GRANTED)
+        val permissionsGranted = grantResults.contains(PERMISSION_GRANTED)
         if (permissionsGranted) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isPermissionGranted(permissions, grantResults, Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 // To get a writeable path manually on Android 10 and later for Share and Receive Plugin.
                 // Otherwise, Receiving files will keep failing until the user chooses a path manually to receive files.
-                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                startActivityForResult(intent, STORAGE_LOCATION_CONFIGURED)
+                openDocumentTreeLauncher.launch(null)
             }
 
             if (isPermissionGranted(permissions, grantResults, Manifest.permission.BLUETOOTH_CONNECT) &&

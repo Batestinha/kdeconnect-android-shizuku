@@ -2,14 +2,15 @@
  * SPDX-FileCopyrightText: 2014 Albert Vaca Cintora <albertvaka@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect
 
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import org.kde.kdeconnect.extensions.closeSafe
 import java.io.ByteArrayInputStream
-import java.io.IOException
+import java.io.Closeable
 import java.io.InputStream
 import java.net.Socket
 
@@ -51,7 +52,7 @@ class NetworkPacket private constructor(
     operator fun set(key: String, value: String) {
         try {
             mBody.put(key, value)
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -71,7 +72,7 @@ class NetworkPacket private constructor(
     operator fun set(key: String, value: Int) {
         try {
             mBody.put(key, value)
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -86,7 +87,7 @@ class NetworkPacket private constructor(
     operator fun set(key: String, value: Long) {
         try {
             mBody.put(key, value)
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -101,7 +102,7 @@ class NetworkPacket private constructor(
     operator fun set(key: String, value: Boolean) {
         try {
             mBody.put(key, value)
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -116,7 +117,7 @@ class NetworkPacket private constructor(
     operator fun set(key: String, value: Double) {
         try {
             mBody.put(key, value)
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -127,7 +128,7 @@ class NetworkPacket private constructor(
     operator fun set(key: String, value: JSONArray?) {
         try {
             mBody.put(key, value)
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -138,7 +139,7 @@ class NetworkPacket private constructor(
     operator fun set(key: String, value: JSONObject?) {
         try {
             mBody.put(key, value)
-        } catch (ignored: JSONException) {
+        } catch (_: JSONException) {
         }
     }
 
@@ -150,7 +151,7 @@ class NetworkPacket private constructor(
             try {
                 val str = jsonArray.getString(i)
                 list.add(str)
-            } catch (ignored: Exception) {
+            } catch (_: Exception) {
             }
         }
         return list
@@ -168,7 +169,7 @@ class NetworkPacket private constructor(
                 jsonArray.put(str)
             }
             mBody.put(key, jsonArray)
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -180,7 +181,7 @@ class NetworkPacket private constructor(
             try {
                 val str = jsonArray.getString(i)
                 list.add(str)
-            } catch (ignored: Exception) {
+            } catch (_: Exception) {
             }
         }
         return list
@@ -198,7 +199,7 @@ class NetworkPacket private constructor(
                 jsonArray.put(str)
             }
             mBody.put(key, jsonArray)
-        } catch (ignored: Exception) {
+        } catch (_: Exception) {
         }
     }
 
@@ -233,6 +234,7 @@ class NetworkPacket private constructor(
 
     fun hasPayload(): Boolean {
         val payload = payload
+        // FIXME: Should payload.payloadSize != 0L be an assert instead?
         return payload != null && payload.payloadSize != 0L
     }
 
@@ -240,7 +242,7 @@ class NetworkPacket private constructor(
         return payloadTransferInfo.length() > 0
     }
 
-    class Payload {
+    class Payload : Closeable {
         /**
          * **NOTE: Do not close the InputStream directly call Payload.close() instead, this is because of this [bug](https://issuetracker.google.com/issues/37018094)**
          */
@@ -267,17 +269,9 @@ class NetworkPacket private constructor(
             this.payloadSize = payloadSize
         }
 
-        fun close() {
-            // TODO: If socket only close socket if that also closes the streams that is
-            try {
-                inputStream?.close()
-            } catch (ignored: IOException) {
-            }
-
-            try {
-                inputSocket?.close()
-            } catch (ignored: IOException) {
-            }
+        override fun close() {
+            inputStream?.closeSafe()
+            inputSocket?.closeSafe()
         }
     }
 
@@ -290,7 +284,6 @@ class NetworkPacket private constructor(
             PACKET_TYPE_PAIR
         )
 
-        @JvmStatic
         @Throws(JSONException::class)
         fun unserialize(s: String): NetworkPacket {
             val jo = JSONObject(s)

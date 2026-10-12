@@ -14,18 +14,36 @@ import android.speech.SpeechRecognizer
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.preference.PreferenceManager
-import org.kde.kdeconnect.KdeConnect.Companion.getInstance
-import org.kde.kdeconnect.ui.MainActivity
-import org.kde.kdeconnect.ui.PermissionsAlertDialogFragment
+import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.base.BaseActivity
 import org.kde.kdeconnect.extensions.viewBinding
+import org.kde.kdeconnect.ui.MainActivity
+import org.kde.kdeconnect.ui.PermissionsAlertDialogFragment
 import org.kde.kdeconnect_tp.R
 import org.kde.kdeconnect_tp.databinding.ActivityBigscreenBinding
 
 class BigscreenActivity : BaseActivity<ActivityBigscreenBinding>() {
 
+    private lateinit var deviceId: String
+
     override val binding : ActivityBigscreenBinding by viewBinding(ActivityBigscreenBinding::inflate)
+
+    private val speechResultLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            // The results are ordered by confidence, use the first one
+            val firstResult = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (firstResult != null) {
+                val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
+                if (plugin == null) {
+                    finish()
+                    return@registerForActivityResult
+                }
+                plugin.sendText(firstResult)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,14 +52,14 @@ class BigscreenActivity : BaseActivity<ActivityBigscreenBinding>() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowHomeEnabled(true)
 
-        val deviceId = intent.getStringExtra("deviceId")
+        deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)!!
 
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {
             binding.micButton.isEnabled = false
             binding.micButton.visibility = View.INVISIBLE
         }
 
-        val plugin = getInstance().getDevicePlugin(deviceId, MousePadPlugin::class.java)
+        val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
         if (plugin == null) {
             finish()
             return
@@ -87,13 +105,14 @@ class BigscreenActivity : BaseActivity<ActivityBigscreenBinding>() {
     }
 
     fun activateSTT() {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-        intent.putExtra(
-            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-        )
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, R.string.bigscreen_speech_extra_prompt)
-        startActivityForResult(intent, REQUEST_SPEECH)
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
+            putExtra(RecognizerIntent.EXTRA_PROMPT, R.string.bigscreen_speech_extra_prompt)
+        }
+        speechResultLauncher.launch(intent)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -105,7 +124,7 @@ class BigscreenActivity : BaseActivity<ActivityBigscreenBinding>() {
         val id = item.itemId
         if (id == R.id.menu_use_mouse_and_keyboard) {
             val intent = Intent(this, MousePadActivity::class.java)
-            intent.putExtra("deviceId", getIntent().getStringExtra("deviceId"))
+            intent.putExtra(MousePadActivity.EXTRA_DEVICE_ID, deviceId)
             startActivity(intent)
             return true
         } else {
@@ -113,30 +132,13 @@ class BigscreenActivity : BaseActivity<ActivityBigscreenBinding>() {
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQUEST_SPEECH && resultCode == RESULT_OK) {
-            // The results are ordered by confidence, use the first one
-            val firstResult = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.first()
-            if (firstResult != null) {
-                val deviceId = intent.getStringExtra("deviceId")
-                val plugin = getInstance().getDevicePlugin(deviceId,MousePadPlugin::class.java)
-                if (plugin == null) {
-                    finish()
-                    return
-                }
-                plugin.sendText(firstResult)
-            }
-        }
-    }
-
     override fun onSupportNavigateUp(): Boolean {
-        super.onBackPressed()
+        onBackPressedDispatcher.onBackPressed()
         return true
     }
 
     companion object {
-        private const val REQUEST_SPEECH = 100
+        const val EXTRA_DEVICE_ID = "deviceId"
     }
 }
 

@@ -13,10 +13,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener
 import android.content.pm.PackageManager
-import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
-import android.preference.PreferenceManager
 import android.service.notification.StatusBarNotification
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
@@ -25,14 +23,16 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.TaskStackBuilder
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
+import androidx.media.VolumeProviderCompat
+import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.Device
-import org.kde.kdeconnect.helpers.NotificationHelper
 import org.kde.kdeconnect.KdeConnect
+import org.kde.kdeconnect.helpers.NotificationHelper
 import org.kde.kdeconnect.plugins.mpris.MprisPlugin.MprisPlayer
 import org.kde.kdeconnect.plugins.notifications.NotificationReceiver
 import org.kde.kdeconnect.plugins.systemvolume.SystemVolumePlugin
 import org.kde.kdeconnect.plugins.systemvolume.SystemVolumeProvider
-import org.kde.kdeconnect.plugins.systemvolume.SystemVolumeProvider.Companion.currentProvider
 import org.kde.kdeconnect.plugins.systemvolume.SystemVolumeProvider.ProviderStateListener
 import org.kde.kdeconnect_tp.R
 
@@ -59,6 +59,8 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
 
     private lateinit var context: Context
     private var mediaSession: MediaSessionCompat? = null
+    private var activeVolumeProvider: SystemVolumeProvider? = null
+    private val fixedVolumeProvider = object : VolumeProviderCompat(VOLUME_CONTROL_FIXED, 0, 0) {}
 
     // Callback for control via the media session API
     private val mediaSessionCallback: MediaSessionCompat.Callback = object : MediaSessionCompat.Callback() {
@@ -186,7 +188,7 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
     private fun getPlayerFromDevice(device: Device, preferredPlayer: MprisPlayer?): MprisPlayer? {
         if (!mprisDevices.contains(device.deviceId)) return null
 
-        val plugin = device.getPlugin(MprisPlugin::class.java) ?: return null
+        val plugin = device.getPlugin<MprisPlugin>() ?: return null
         // First try the preferred player, if supplied & available, otherwise, accept any playing player
         val player = preferredPlayer?.takeIf(plugin::hasPlayer)
             ?: plugin.playingPlayer
@@ -199,8 +201,7 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
     }
 
     private fun updateRemoteDeviceVolumeControl(device: Device) {
-        val plugin = device.getPlugin(SystemVolumePlugin::class.java)
-            ?: return
+        val plugin = device.getPlugin<SystemVolumePlugin>()
         val systemVolumeProvider = SystemVolumeProvider.getInstance()
         systemVolumeProvider.setPlugin(plugin)
         systemVolumeProvider.addStateListener( this)
@@ -328,8 +329,8 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
         )
 
         val iOpenActivity = Intent(context, MprisActivity::class.java).apply {
-            putExtra("deviceId", deviceId)
-            putExtra("player", player.playerName)
+            putExtra(MprisActivity.EXTRA_DEVICE_ID, deviceId)
+            putExtra(MprisActivity.EXTRA_PLAYER, player.playerName)
         }
 
         val piOpenActivity = TaskStackBuilder.create(context)
@@ -427,15 +428,17 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
             val mediaSession = mediaSession ?: MediaSessionCompat(context, MPRIS_MEDIA_SESSION_TAG).apply {
                 setCallback(mediaSessionCallback, Handler(context.mainLooper))
             }
+            configureRemotePlayback(mediaSession)
             mediaSession.setMetadata(metadata.build())
             mediaSession.setPlaybackState(playbackState.build())
             mediaStyle.setMediaSession(mediaSession.sessionToken)
             notification.setStyle(mediaStyle)
             mediaSession.isActive = true
-            ContextCompat.getSystemService(context, NotificationManager::class.java)?.notify(MPRIS_MEDIA_NOTIFICATION_ID, notification.build())
             if (this.mediaSession == null) {
                 this.mediaSession = mediaSession
             }
+            context.getSystemService<NotificationManager>()
+                ?.notify(MPRIS_MEDIA_NOTIFICATION_ID, notification.build())
         }
 
         currentShowingPlayer = player
@@ -444,8 +447,8 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
 
     fun closeMediaNotification() {
         // Remove the notification
-        val nm = ContextCompat.getSystemService(context, NotificationManager::class.java)
-        nm!!.cancel(MPRIS_MEDIA_NOTIFICATION_ID)
+        context.getSystemService<NotificationManager>()
+            ?.cancel(MPRIS_MEDIA_NOTIFICATION_ID)
 
         // Clear the current player and media session
         currentShowingPlayer = null
@@ -457,7 +460,7 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
                 release()
             }
             mediaSession = null
-            currentProvider?.release()
+            SystemVolumeProvider.currentProvider?.release()
         }
     }
 
@@ -488,21 +491,21 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
         try {
             spotifyRunning = service.activeNotifications.any { n -> n.isSpotify() }
             updateMediaNotification()
-        } catch (e: SecurityException) {
+        } catch (e: RuntimeException) {
+            // getActiveNotifications can fail unexpectedly trying to unserialize Parcelables
             Log.w(TAG, "Failed to get active notifications", e)
         }
     }
 
     override fun onProviderStateChanged(systemVolumeProvider: SystemVolumeProvider, isActive: Boolean) {
-        val mediaSession = mediaSession ?: return
+        activeVolumeProvider = systemVolumeProvider.takeIf { isActive }
+        mediaSession?.let(::configureRemotePlayback)
+    }
+
+    private fun configureRemotePlayback(mediaSession: MediaSessionCompat) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         val allowVolumeKeys = prefs.getBoolean(context.getString(R.string.pref_mpris_volume_control_key), true)
-
-        if (isActive && allowVolumeKeys) {
-            mediaSession.setPlaybackToRemote(systemVolumeProvider)
-        } else {
-            mediaSession.setPlaybackToLocal(AudioManager.STREAM_MUSIC)
-        }
+        mediaSession.setPlaybackToRemote(activeVolumeProvider?.takeIf { allowVolumeKeys } ?: fixedVolumeProvider)
     }
 
     private fun StatusBarNotification.isSpotify(): Boolean =

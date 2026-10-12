@@ -6,7 +6,6 @@
 package org.kde.kdeconnect.ui
 
 import android.Manifest
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -25,6 +24,7 @@ import androidx.annotation.RequiresApi
 import androidx.compose.runtime.getValue
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -40,7 +40,6 @@ import org.kde.kdeconnect.ui.compose.screen.pairing.PairingScreen
 import org.kde.kdeconnect.ui.compose.screen.pairing.PairingViewModel
 import org.kde.kdeconnect_tp.R
 import org.kde.kdeconnect_tp.databinding.DevicesListBinding
-import androidx.core.content.edit
 
 /**
  * The view that the user will see when there are no devices paired, or when you choose "add a new device" from the sidebar.
@@ -260,20 +259,7 @@ class PairingFragment : BaseFragment<DevicesListBinding>() {
         )
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        when (requestCode) {
-            RESULT_PAIRING_SUCCESFUL -> if (resultCode == 1) {
-                val deviceId = data?.getStringExtra("deviceId")
-                (mActivity as? MainActivity)?.onDeviceSelected(deviceId)
-            }
-
-            else -> super.onActivityResult(requestCode, resultCode, data)
-        }
-    }
-
     companion object {
-        private const val RESULT_PAIRING_SUCCESFUL = Activity.RESULT_FIRST_USER
-
         private const val PREFS_NAME = "permission_prefs"
     }
 }

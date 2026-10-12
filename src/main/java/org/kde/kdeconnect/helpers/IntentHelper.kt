@@ -12,6 +12,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -19,7 +20,6 @@ import org.kde.kdeconnect.extensions.getParcelableArrayListCompat
 import org.kde.kdeconnect.extensions.getParcelableCompat
 import org.kde.kdeconnect.helpers.LifecycleHelper.isInForeground
 import org.kde.kdeconnect_tp.R
-import kotlin.text.endsWith
 
 object IntentHelper {
     /**
@@ -42,7 +42,7 @@ object IntentHelper {
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setAutoCancel(true)
                 .build()
-            val id = System.currentTimeMillis().toInt()
+            val id = SystemClock.elapsedRealtime().toInt()
             NotificationManagerCompat.from(context).notify(id, notification)
         } else {
             context.startActivity(intent)

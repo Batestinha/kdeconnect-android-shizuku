@@ -14,13 +14,14 @@ import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.preference.PreferenceManager
 import android.provider.Telephony
 import android.telephony.SmsManager
 import android.text.TextUtils
 import android.util.Base64
 import android.util.Log
+import androidx.preference.PreferenceManager
 import com.android.mms.dom.smil.parser.SmilXmlSerializer
 import com.google.android.mms.ContentType
 import com.google.android.mms.InvalidHeaderValueException
@@ -39,11 +40,10 @@ import com.klinker.android.send_message.Message
 import com.klinker.android.send_message.Settings
 import com.klinker.android.send_message.Transaction
 import com.klinker.android.send_message.Utils
-import org.apache.commons.io.IOUtils
+import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.helpers.SMSHelper
 import org.kde.kdeconnect.helpers.TelephonyHelper
 import org.kde.kdeconnect.helpers.TelephonyHelper.LocalPhoneNumber
-import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect_tp.R
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -58,34 +58,26 @@ import kotlin.math.abs
 object SmsMmsUtils {
     private const val SENDING_MESSAGE = "Sending message"
 
-    private fun getSendingPhoneNumber(context: Context, subscriptionID: Int): LocalPhoneNumber {
-        val sendingPhoneNumber: LocalPhoneNumber
+    private fun getSendingPhoneNumber(context: Context, subscriptionID: Int): LocalPhoneNumber? {
         val allPhoneNumbers = TelephonyHelper.getAllPhoneNumbers(context)
-
         val maybeSendingPhoneNumber = allPhoneNumbers.firstOrNull { localPhoneNumber -> localPhoneNumber.subscriptionID == subscriptionID }
         if (maybeSendingPhoneNumber != null) {
-            sendingPhoneNumber = maybeSendingPhoneNumber
+            return maybeSendingPhoneNumber
+        } else if (allPhoneNumbers.isEmpty()) {
+            // We were not able to get any phone number for the user's device.
+            // The only more-correct thing we could do here is query the user (maybe in a
+            // persistent configuration) for their phone number(s).
+            Log.w(SENDING_MESSAGE, "We do not know *any* phone numbers for this device. "
+                    + "Attempting to send a message without knowing the local phone number is likely "
+                    + "to result in strange behavior, such as the message being sent to yourself, "
+                    + "or might entirely fail to send (or be received)."
+            )
+            return null
+        } else {
+            // Pick an arbitrary phone number
+            Log.w(SENDING_MESSAGE, "Unable to determine correct outgoing address for sub ID $subscriptionID. Using ${allPhoneNumbers[0]}")
+            return allPhoneNumbers[0]
         }
-        else {
-            if (allPhoneNumbers.isEmpty()) {
-                // We were not able to get any phone number for the user's device
-                // Use a null "dummy" number instead. This should behave the same as not setting
-                // the FromAddress (below) since the default value there is null.
-                // The only more-correct thing we could do here is query the user (maybe in a
-                // persistent configuration) for their phone number(s).
-                sendingPhoneNumber = LocalPhoneNumber(null, subscriptionID)
-                Log.w(SENDING_MESSAGE, ("We do not know *any* phone numbers for this device. "
-                        + "Attempting to send a message without knowing the local phone number is likely "
-                        + "to result in strange behavior, such as the message being sent to yourself, "
-                        + "or might entirely fail to send (or be received).")
-                )
-            } else {
-                // Pick an arbitrary phone number
-                sendingPhoneNumber = allPhoneNumbers[0]
-            }
-            Log.w(SENDING_MESSAGE, "Unable to determine correct outgoing address for sub ID $subscriptionID. Using $sendingPhoneNumber")
-        }
-        return sendingPhoneNumber
     }
 
     private fun getTransactionSettings(context: Context, subID: Int, prefs: SharedPreferences): Settings {
@@ -129,8 +121,8 @@ object SmsMmsUtils {
     fun sendMessage(context: Context, textMessage: String?, attachedFiles: List<SMSHelper.Attachment>, addressList: MutableList<SMSHelper.Address>, subID: Int) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
 
-        val sendingPhoneNumber: LocalPhoneNumber = getSendingPhoneNumber(context, subID)
-        if (sendingPhoneNumber.number != null) {
+        val sendingPhoneNumber = getSendingPhoneNumber(context, subID)
+        if (sendingPhoneNumber != null) {
             // If the message is going to more than one target (to allow the user to send a message to themselves)
             if (addressList.size > 1) {
                 // Remove the user's phone number if present in the list of recipients
@@ -154,7 +146,7 @@ object SmsMmsUtils {
                 message.addMedia(file, mimeType, fileName)
             }
 
-            message.fromAddress = sendingPhoneNumber.number
+            message.fromAddress = sendingPhoneNumber?.number
             message.save = true
 
             // Sending MMS on android requires the app to be set as the default SMS app,
@@ -228,10 +220,20 @@ object SmsMmsUtils {
             Log.e(SENDING_MESSAGE, "Error while writing temporary PDU file: ", e)
         }
 
-        val mSmsManager = if (klinkerSettings.subscriptionId < 0) {
-            SmsManager.getDefault()
+        val mSmsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val baseManager = context.getSystemService(SmsManager::class.java)
+            if (klinkerSettings.subscriptionId < 0) {
+                baseManager
+            } else {
+                baseManager.createForSubscriptionId(klinkerSettings.subscriptionId)
+            }
         } else {
-            SmsManager.getSmsManagerForSubscriptionId(klinkerSettings.subscriptionId)
+            @Suppress("DEPRECATION")
+            if (klinkerSettings.subscriptionId < 0) {
+                SmsManager.getDefault()
+            } else {
+                SmsManager.getSmsManagerForSubscriptionId(klinkerSettings.subscriptionId)
+            }
         }
 
         mSmsManager.sendMultimediaMessage(context, contentUri, null, configOverrides, null)
@@ -243,7 +245,7 @@ object SmsMmsUtils {
     /**
      * Copy of the same-name method from https://github.com/klinker41/android-smsmms
      */
-    private fun buildPdu(context: Context, fromAddress: String, recipients: Array<String>, subject: String?, parts: List<MMSPart>, settings: Settings): SendReq {
+    private fun buildPdu(context: Context, fromAddress: String?, recipients: Array<String>, subject: String?, parts: List<MMSPart>, settings: Settings): SendReq {
         val req = SendReq()
         // From, per spec
         req.prepareFromAddress(context, fromAddress, settings.subscriptionId)
@@ -431,7 +433,7 @@ object SmsMmsUtils {
             context.contentResolver.openInputStream(partURI).use { inputStream ->
                 // Try read from the InputStream
                 if (inputStream != null) {
-                    byteArray = IOUtils.toByteArray(inputStream)
+                    byteArray = inputStream.readBytes()
                 }
             }
         } catch (e: IOException) {

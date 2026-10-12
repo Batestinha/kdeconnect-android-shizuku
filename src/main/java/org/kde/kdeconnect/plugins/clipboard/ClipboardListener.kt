@@ -3,7 +3,7 @@
  * SPDX-FileCopyrightText: 2021 Ilmaz Gumerov <ilmaz1309@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect.plugins.clipboard
 
 import android.Manifest
@@ -20,6 +20,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.util.Log
 import androidx.core.content.ContextCompat
+import androidx.core.content.getSystemService
 import org.kde.kdeconnect_tp.BuildConfig
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
@@ -130,8 +131,8 @@ class ClipboardListener {
         context = ctx.applicationContext
 
         Handler(Looper.getMainLooper()).post {
-            cm = ContextCompat.getSystemService(context, ClipboardManager::class.java)!!
-            cm.addPrimaryClipChangedListener { onClipboardChanged() }
+            cm = context.getSystemService<ClipboardManager>()!!
+            cm.addPrimaryClipChangedListener { this.onClipboardChanged() }
         }
 
         try {
@@ -366,7 +367,6 @@ class ClipboardListener {
         }
     }
 
-    @Suppress("DEPRECATION")
     fun setText(text: String?) {
         if (this::cm.isInitialized) {
             updateTimestamp = System.currentTimeMillis()
@@ -382,12 +382,10 @@ class ClipboardListener {
 
         private var _instance: ClipboardListener? = null
 
-        @JvmStatic
         fun instance(context: Context): ClipboardListener {
             return _instance ?: ClipboardListener(context).also { _instance = it }
         }
 
-        @JvmStatic
         fun detectContentType(clip: ClipData?): ClipboardContentType {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
                 return ClipboardContentType.Text

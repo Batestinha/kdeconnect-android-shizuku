@@ -5,13 +5,14 @@
  */
 package org.kde.kdeconnect.ui
 
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.TextView
-import androidx.activity.enableEdgeToEdge
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import org.kde.kdeconnect.DeviceStats
 import org.kde.kdeconnect.KdeConnect.Companion.getInstance
@@ -25,38 +26,28 @@ class PluginSettingsActivity : BaseActivity<ActivityPluginSettingsBinding>(), Pl
 
     override val binding by lazy { ActivityPluginSettingsBinding.inflate(layoutInflater) }
 
+    private lateinit var settingsDeviceId: String
+
     public override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
+        settingsDeviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
+            ?: throw RuntimeException("You must start DeviceSettingActivity using an intent that has a $EXTRA_DEVICE_ID extra")
+
         super.onCreate(savedInstanceState)
 
-        setSupportActionBar(findViewById(R.id.toolbar))
+        setSupportActionBar(binding.toolbarLayout.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowHomeEnabled(true)
 
-        var pluginKey: String? = null
-
-        if (intent.hasExtra(EXTRA_DEVICE_ID)) {
-            settingsDeviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
-            if (intent.hasExtra(EXTRA_PLUGIN_KEY)) {
-                pluginKey = intent.getStringExtra(EXTRA_PLUGIN_KEY)
-            }
-        } else if (settingsDeviceId == null) {
-            throw RuntimeException("You must start DeviceSettingActivity using an intent that has a $EXTRA_DEVICE_ID extra")
-        }
-
         var fragment = supportFragmentManager.findFragmentById(R.id.fragmentPlaceHolder)
         if (fragment == null) {
+            val pluginKey = intent.getStringExtra(EXTRA_PLUGIN_KEY)
             if (pluginKey != null) {
-                val device = getInstance().getDevice(settingsDeviceId)
-                if (device != null) {
-                    val plugin = device.getPluginIncludingWithoutPermissions(pluginKey)
-                    if (plugin != null) {
-                        fragment = plugin.getSettingsFragment(this)
-                    }
-                }
+                fragment = getInstance().getDevice(settingsDeviceId)
+                    ?.getPluginIncludingWithoutPermissions(pluginKey)
+                    ?.getSettingsFragment(this)
             }
             if (fragment == null) {
-                fragment = PluginSettingsListFragment.newInstance(settingsDeviceId!!)
+                fragment = PluginSettingsListFragment.newInstance(settingsDeviceId)
             }
 
             supportFragmentManager
@@ -87,7 +78,7 @@ class PluginSettingsActivity : BaseActivity<ActivityPluginSettingsBinding>(), Pl
         }
         menu.add(R.string.plugin_stats)
             .setOnMenuItemClickListener {
-                val stats = DeviceStats.getStatsForDevice(settingsDeviceId!!)
+                val stats = DeviceStats.getStatsForDevice(settingsDeviceId)
                 val alertDialog = MaterialAlertDialogBuilder(this@PluginSettingsActivity)
                     .setTitle(R.string.plugin_stats)
                     .setPositiveButton(R.string.ok) { dialog, _ ->
@@ -125,7 +116,7 @@ class PluginSettingsActivity : BaseActivity<ActivityPluginSettingsBinding>(), Pl
     }
 
     override fun onSupportNavigateUp(): Boolean {
-        super.onBackPressed()
+        onBackPressedDispatcher.onBackPressed()
         return true
     }
 
@@ -137,9 +128,10 @@ class PluginSettingsActivity : BaseActivity<ActivityPluginSettingsBinding>(), Pl
         const val EXTRA_DEVICE_ID: String = "deviceId"
         const val EXTRA_PLUGIN_KEY: String = "pluginKey"
 
-        // Weird name because Activity already has getters and setters for 'deviceId'
-        // Static because if we get here by using the back button in the action bar, the extra deviceId will not be set.
-        var settingsDeviceId: String? = null
-            private set
+        fun createIntent(context: Context, deviceId: String, pluginKey: String? = null): Intent =
+            Intent(context, PluginSettingsActivity::class.java).apply {
+                putExtra(EXTRA_DEVICE_ID, deviceId)
+                pluginKey?.let { putExtra(EXTRA_PLUGIN_KEY, it) }
+            }
     }
 }

@@ -46,8 +46,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -102,7 +102,7 @@ fun RunCommandScreen(
             modifier = Modifier.safeDrawingPadding(),
             topBar = {
                 RunCommandAppBar(
-                    name = device.name,
+                    subTitle = device.name,
                     onBackPressedDispatcher = onBackPressedDispatcher,
                     showClearOutput = showOutputCard,
                     onClearOutput = { plugin.clearOutput() },
@@ -343,14 +343,14 @@ private fun OutputCard(
 
 @Composable
 fun RunCommandAppBar(
-    name: String,
+    subTitle: String,
     onBackPressedDispatcher: OnBackPressedDispatcher,
     showClearOutput: Boolean,
     onClearOutput: () -> Unit,
 ) {
     KdeTopAppBar(
         title = stringResource(R.string.pref_plugin_runcommand),
-        subTitle = name,
+        subTitle = subTitle,
         navIconOnClick = { onBackPressedDispatcher.onBackPressed() },
         navIconDescription = stringResource(androidx.appcompat.R.string.abc_action_bar_up_description),
         actions = {

@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2019 Juan David Vega <jdvr.93@hotmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted-GPL
-*/
+ */
 package org.kde.kdeconnect.ui
 
 import android.Manifest
@@ -14,9 +14,9 @@ import android.widget.ArrayAdapter
 import android.widget.CheckBox
 import android.widget.ListView
 import androidx.appcompat.app.AlertDialog
-import org.kde.kdeconnect.helpers.TrustedNetworkHelper
 import org.kde.kdeconnect.base.BaseActivity
 import org.kde.kdeconnect.extensions.viewBinding
+import org.kde.kdeconnect.helpers.TrustedNetworkHelper
 import org.kde.kdeconnect_tp.R
 import org.kde.kdeconnect_tp.databinding.TrustedNetworkListBinding
 
