@@ -31,9 +31,9 @@ class ClipboardPlugin : Plugin() {
     override val description: String
         get() = context.resources.getString(R.string.pref_plugin_clipboard_desc)
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
 
-    override fun supportsDeviceSpecificSettings(): Boolean = true
+    override val settingsScope = SettingsScope.PER_DEVICE
 
     override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
         return PluginSettingsFragment.newInstance(pluginKey, device.deviceId, R.xml.clipboardplugin_preferences)
@@ -57,7 +57,7 @@ class ClipboardPlugin : Plugin() {
                 }
                 return true
             }
-            else -> throw UnsupportedOperationException("Unknown packet type: " + np.type)
+            else -> throw UnsupportedOperationException("Unknown packet type: ${np.type}")
         }
     }
 

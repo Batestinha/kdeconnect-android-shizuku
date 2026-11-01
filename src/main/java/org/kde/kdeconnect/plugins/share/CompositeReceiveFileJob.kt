@@ -18,8 +18,6 @@ import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.NetworkPacket
-import org.kde.kdeconnect.async.BackgroundJob
-import org.kde.kdeconnect.extensions.closeSafe
 import org.kde.kdeconnect.helpers.FilesHelper
 import org.kde.kdeconnect.helpers.MediaStoreHelper
 import org.kde.kdeconnect_tp.R
@@ -32,7 +30,7 @@ import java.nio.file.Paths
 import java.nio.file.attribute.FileTime
 
 /**
- * A type of [BackgroundJob] that reads Files from another device.
+ * A [ShareJob] that reads Files from another device.
  *
  * We receive the requests as [NetworkPacket]s.
  *
@@ -44,8 +42,8 @@ import java.nio.file.attribute.FileTime
  *
  * @see CompositeUploadFileJob
  */
-class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
-    : BackgroundJob<Device, Unit>(device, callBack)
+class CompositeReceiveFileJob(device: Device, onFinished: (ShareJob) -> Unit)
+    : ShareJob(device, onFinished)
 {
 
     private val receiveNotification: ReceiveNotification = ReceiveNotification(device, id)
@@ -75,9 +73,6 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
     var isRunning: Boolean = false
         private set
 
-    private val device: Device
-        get() = requestInfo
-
     fun updateTotals(numberOfFiles: Int, totalPayloadSize: Long) {
         synchronized(lock) {
             this.totalNumFiles = numberOfFiles
@@ -93,13 +88,21 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
         }
     }
 
+    override fun cancel() {
+        super.cancel()
+        // Wake up run() if it's waiting for the next packet
+        synchronized(lock) {
+            lock.notifyAll()
+        }
+    }
+
     /**
      * @return false if the job has already finished and won't receive this packet, so the caller
      * should use a new job instead
      */
     fun addNetworkPacket(networkPacket: NetworkPacket): Boolean {
         synchronized(lock) {
-            if (finished) {
+            if (finished || isCancelled) {
                 return false
             }
 
@@ -123,8 +126,7 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
     }
 
     override fun run() {
-        var outputStream: OutputStream? = null
-
+        var numFilesReceived = 0
         try {
             var fileDocument: DocumentFile? = null
 
@@ -142,39 +144,16 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
                     next
                 } ?: break
 
-                currentFileName = packet.getString("filename", System.currentTimeMillis().toString())
+                val filename = packet.getString("filename", System.currentTimeMillis().toString())
+                currentFileName = filename
                 currentFileNum++
 
                 setProgress(prevProgressPercentage)
 
-                fileDocument = getDocumentFileFor(currentFileName!!, packet.getBoolean("open", false))
-
-                if (packet.hasPayload()) {
-                    outputStream = BufferedOutputStream(device.context.contentResolver.openOutputStream(fileDocument.uri), WRITE_BUFFER_SIZE)
-                    val inputStream = packet.payload?.inputStream
-                        ?: throw RuntimeException("Payload InputStream is null for $currentFileName")
-
-                    val received = receiveFile(inputStream, outputStream)
-
-                    packet.payload?.close()
-
-                    outputStream.closeSafe()
-                    outputStream = null
-
-                    if (received != packet.payloadSize) {
-                        fileDocument.delete()
-
-                        if (!isCancelled) {
-                            throw RuntimeException("Failed to receive: $currentFileName received:$received bytes, expected: ${packet.payloadSize} bytes")
-                        }
-                    } else {
-                        publishFile(fileDocument, received)
-                    }
-                } else {
-                    // TODO: Only set progress to 100 if this is the only file/packet to send
-                    setProgress(100)
-                    publishFile(fileDocument, 0)
-                }
+                fileDocument = getDocumentFileFor(filename, packet.getBoolean("open", false))
+                val size = receivePacket(fileDocument, packet)
+                publishFile(fileDocument, size)
+                numFilesReceived++
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     if (packet.has("lastModified")) {
@@ -200,13 +179,7 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
                         if (remainingMillis <= 0) { // Note wait(0) would wait forever
                             break
                         }
-                        try {
-                            lock.wait(remainingMillis)
-                        } catch (_: InterruptedException) {
-                            // Job was cancelled
-                            Thread.currentThread().interrupt()
-                            break
-                        }
+                        lock.wait(remainingMillis)
                     }
 
                     if (networkPacketList.isEmpty()) {
@@ -214,7 +187,7 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
                         finished = true
 
                         if (!isCancelled && currentFileNum < totalNumFiles) {
-                            throw RuntimeException("Failed to receive ${totalNumFiles - currentFileNum + 1} files")
+                            throw RuntimeException("Failed to receive ${totalNumFiles - numFilesReceived} files")
                         }
                     }
                 }
@@ -244,23 +217,22 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
 
                 receiveNotification.show()
             }
-            reportResult(Unit)
         } catch (_: ActivityNotFoundException) {
             receiveNotification.setFinished(device.context.getString(R.string.no_app_for_opening))
             receiveNotification.show()
-            // The file was received fine, there's just no app to open it
-            reportResult(Unit)
         } catch (e: Exception) {
             isRunning = false
-
-            Log.e("SharePlugin", "Error receiving file", e)
-
-            synchronized(lock) {
-                val failedFiles = totalNumFiles - currentFileNum + 1
-                receiveNotification.setFailed(device.context.resources.getQuantityString(R.plurals.received_files_fail_title, failedFiles, device.name, failedFiles, totalNumFiles))
+            if (isCancelled) {
+                Log.d("SharePlugin", "Cancelled receiving file $currentFileName", e)
+                receiveNotification.cancel()
+            } else {
+                Log.e("SharePlugin", "Error receiving file $currentFileName", e)
+                synchronized(lock) {
+                    val failedFiles = totalNumFiles - numFilesReceived
+                    receiveNotification.setFailed(device.context.resources.getQuantityString(R.plurals.received_files_fail_title, failedFiles, device.name, failedFiles, totalNumFiles))
+                }
+                receiveNotification.show()
             }
-            receiveNotification.show()
-            reportError(e)
         } finally {
             val remainingPackets = synchronized(lock) {
                 finished = true
@@ -270,7 +242,42 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
             for (np in remainingPackets) {
                 np.payload?.close()
             }
-            outputStream?.closeSafe()
+        }
+    }
+
+    /**
+     * Writes the packet's payload into [fileDocument] and returns the number of bytes received.
+     * If the transfer fails or is cancelled, the file is deleted and this throws.
+     */
+    private fun receivePacket(fileDocument: DocumentFile, packet: NetworkPacket): Long {
+        try {
+            val received = if (packet.hasPayload()) {
+                try {
+                    val inputStream = packet.payload?.inputStream
+                        ?: throw RuntimeException("Payload InputStream is null")
+                    val outputStream = device.context.contentResolver.openOutputStream(fileDocument.uri)
+                        ?: throw RuntimeException("Can't open output stream")
+
+                    BufferedOutputStream(outputStream, WRITE_BUFFER_SIZE).use {
+                        receiveFile(inputStream, it)
+                    }
+                } finally {
+                    packet.payload?.close()
+                }
+            } else {
+                0L
+            }
+
+            if (isCancelled) {
+                throw RuntimeException("Cancelled")
+            }
+            if (packet.payloadSize >= 0 && received < packet.payloadSize) {
+                throw RuntimeException("Size mismatch: received:$received bytes, expected: ${packet.payloadSize} bytes")
+            }
+            return received
+        } catch (e: Exception) {
+            fileDocument.delete()
+            throw e
         }
     }
 
@@ -305,7 +312,7 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
             output.write(data, 0, count)
 
             val progressPercentage = synchronized(lock) {
-                totalReceived * 100 / totalPayloadSize
+                if (totalPayloadSize > 0) (totalReceived * 100 / totalPayloadSize).coerceIn(0L, 100L) else 0L
             }.toInt()
             val curTimeMillis = SystemClock.elapsedRealtime()
 
@@ -344,16 +351,22 @@ class CompositeReceiveFileJob(device: Device, callBack: Callback<Unit>)
     private fun publishFile(fileDocument: DocumentFile, size: Long) {
         if (!ShareSettingsFragment.isCustomDestinationEnabled(device.context)) {
             Log.i("SharePlugin", "Adding to downloads")
-            val manager = ContextCompat.getSystemService(
-                device.context,
-                DownloadManager::class.java,
-            )
-            manager?.addCompletedDownload(fileDocument.uri.lastPathSegment, device.name, true, fileDocument.type, fileDocument.uri.path, size, false)
-        } else {
-            // Make sure it is added to the Android Gallery anyway
-            Log.i("SharePlugin", "Adding to gallery")
-            MediaStoreHelper.indexFile(device.context, fileDocument.uri)
+            try {
+                val manager = ContextCompat.getSystemService(
+                    device.context,
+                    DownloadManager::class.java,
+                )
+                manager?.addCompletedDownload(fileDocument.uri.lastPathSegment, device.name, true, fileDocument.type, fileDocument.uri.path, size, false)
+            } catch (e: Exception) {
+                // DownloadManager.addCompletedDownload is deprecated starting in Android 10 and throws
+                // on modern Android versions (or scoped storage environments) when given raw file paths.
+                Log.w("SharePlugin", "Failed to add completed download to DownloadManager", e)
+            }
         }
+
+        // Index the file in the MediaStore so system scanners (gallery, downloads, file managers) detect it immediately
+        Log.i("SharePlugin", "Indexing file in MediaStore")
+        MediaStoreHelper.indexFile(device.context, fileDocument.uri)
     }
 
     private fun openFile(fileDocument: DocumentFile) {

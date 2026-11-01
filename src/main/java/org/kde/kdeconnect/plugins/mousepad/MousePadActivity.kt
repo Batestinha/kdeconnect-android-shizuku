@@ -28,6 +28,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.KdeConnect
+import org.kde.kdeconnect.ui.compose.components.addDeviceDisconnectedOverlay
 import org.kde.kdeconnect.base.BaseActivity
 import org.kde.kdeconnect.ui.PluginSettingsActivity
 import org.kde.kdeconnect_tp.R
@@ -45,6 +46,7 @@ class MousePadActivity :
     OnApplyWindowInsetsListener {
 
     private lateinit var deviceId: String
+    private lateinit var plugin: MousePadPlugin
 
     private var mPrevX: Float = 0f
     private var mPrevY: Float = 0f
@@ -124,11 +126,6 @@ class MousePadActivity :
             y *= (gyroscopeSensitivity / 100.0f)
         }
 
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-        if (plugin == null) {
-            finish()
-            return
-        }
         plugin.sendMouseDelta(x, y)
     }
 
@@ -143,10 +140,12 @@ class MousePadActivity :
         binding.mouseClickRight.setOnClickListener { sendRightClick() }
 
         deviceId = intent.getStringExtra(EXTRA_DEVICE_ID) ?: ""
-        if (deviceId.isEmpty()) {
+        val device = KdeConnect.getInstance().getDevice(deviceId)
+        plugin = device?.getPlugin<MousePadPlugin>() ?: run {
             finish()
             return
         }
+        binding.root.addDeviceDisconnectedOverlay(device)
 
         window.decorView.isHapticFeedbackEnabled = true
 
@@ -222,7 +221,9 @@ class MousePadActivity :
     }
 
     override fun onDestroy() {
-        prefs.unregisterOnSharedPreferenceChangeListener(this)
+        if (::prefs.isInitialized) {
+            prefs.unregisterOnSharedPreferenceChangeListener(this)
+        }
         super.onDestroy()
     }
 
@@ -252,11 +253,6 @@ class MousePadActivity :
                 true
             }
             R.id.menu_show_keyboard -> {
-                val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-                if (plugin == null) {
-                    finish()
-                    return true
-                }
                 if (plugin.isKeyboardEnabled) {
                     toggleKeyboard()
                 } else {
@@ -265,11 +261,6 @@ class MousePadActivity :
                 true
             }
             R.id.menu_open_compose_send -> {
-                val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-                if (plugin == null) {
-                    finish()
-                    return true
-                }
                 if (plugin.isKeyboardEnabled) {
                     showCompose()
                 } else {
@@ -299,11 +290,6 @@ class MousePadActivity :
             }
         }
 
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-        if (plugin == null) {
-            finish()
-            return true
-        }
 
         when (actionType) {
             MotionEvent.ACTION_DOWN -> {
@@ -411,11 +397,6 @@ class MousePadActivity :
     override fun onLongPress(e: MotionEvent) {
         if (!doubleTapDragEnabled && !dragging) {
             window.decorView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-            val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-            if (plugin == null) {
-                finish()
-                return
-            }
             plugin.sendSingleHold()
             dragging = true
         }
@@ -434,11 +415,6 @@ class MousePadActivity :
     }
 
     override fun onDoubleTap(e: MotionEvent): Boolean {
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-        if (plugin == null) {
-            finish()
-            return true
-        }
         if (!dragging) {
             if (doubleTapDragEnabled) {
                 maybeDragging = true
@@ -490,11 +466,6 @@ class MousePadActivity :
     }
 
     private fun sendLeftClick() {
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-        if (plugin == null) {
-            finish()
-            return
-        }
         if (dragging) {
             plugin.sendSingleRelease()
             dragging = false
@@ -504,29 +475,14 @@ class MousePadActivity :
     }
 
     private fun sendMiddleClick() {
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-        if (plugin == null) {
-            finish()
-            return
-        }
         plugin.sendMiddleClick()
     }
 
     private fun sendRightClick() {
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-        if (plugin == null) {
-            finish()
-            return
-        }
         plugin.sendRightClick()
     }
 
     private fun sendScroll(x: Double, y: Double) {
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-        if (plugin == null) {
-            finish()
-            return
-        }
         plugin.sendScroll(x, y)
     }
 
@@ -635,6 +591,10 @@ class MousePadActivity :
         }
 
         doubleTapDragEnabled = p.getBoolean(getString(R.string.mousepad_doubletap_drag_enabled_pref), true)
+        binding.mousepadInfo.setText(
+            if (doubleTapDragEnabled) R.string.mousepad_info_double_tap
+            else R.string.mousepad_info
+        )
 
         prefsApplied = true
     }

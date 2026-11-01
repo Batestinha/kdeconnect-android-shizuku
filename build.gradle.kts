@@ -24,6 +24,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.dependencyLicenseReport)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 val licenseResDir = "$projectDir/build/dependency-license-res"
@@ -41,8 +42,8 @@ android {
         applicationId = "org.kde.kdeconnect_tp"
         minSdk = 24
         targetSdk = 37
-        versionCode = 13600
-        versionName = "1.36.0"
+        versionCode = 13700
+        versionName = "1.37.0"
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     }
     buildFeatures {
@@ -313,6 +314,7 @@ dependencies {
     // Kotlin
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.serialization.json)
 
     // Testing
     testImplementation(libs.junit)

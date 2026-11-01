@@ -7,10 +7,10 @@
 package org.kde.kdeconnect.plugins.notifications
 
 import android.Manifest
-import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.os.Build
@@ -18,7 +18,9 @@ import android.os.Bundle
 import android.os.Process
 import android.os.UserManager
 import android.util.Log
+import android.view.LayoutInflater
 import android.view.Menu
+import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
@@ -30,21 +32,21 @@ import android.widget.ListView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.SearchView
 import androidx.core.content.getSystemService
-import androidx.core.widget.TextViewCompat
-import org.kde.kdeconnect.base.BaseActivity
-import org.kde.kdeconnect.helpers.ThreadHelper
-import org.kde.kdeconnect_tp.R
-import org.kde.kdeconnect_tp.databinding.ActivityNotificationFilterBinding
-import java.util.ArrayList
-import java.util.HashSet
-import androidx.core.content.edit
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toDrawable
+import androidx.core.view.MenuProvider
+import androidx.core.widget.TextViewCompat
+import androidx.lifecycle.Lifecycle
+import org.kde.kdeconnect.helpers.ThreadHelper
+import org.kde.kdeconnect.ui.PluginSettingsFragment
+import org.kde.kdeconnect_tp.R
+import org.kde.kdeconnect_tp.databinding.FragmentNotificationFilterBinding
 
-// TODO: Turn this into a PluginSettingsFragment
-class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBinding>() {
+class NotificationsSettingsFragment : PluginSettingsFragment() {
 
     private lateinit var appDatabase: AppDatabase
+    private var _binding: FragmentNotificationFilterBinding? = null
+    private val binding get() = _binding!!
 
     internal class AppListInfo(
         val pkg: String,
@@ -56,10 +58,6 @@ class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBindin
     // This variable stores all app information and serves as a data source for filtering.
     private var mAllApps: List<AppListInfo> = emptyList()
     private var apps: MutableList<AppListInfo> = mutableListOf() // Filtered data.
-
-    override val binding: ActivityNotificationFilterBinding by lazy {
-        ActivityNotificationFilterBinding.inflate(layoutInflater)
-    }
 
     internal inner class AppListAdapter : BaseAdapter() {
 
@@ -88,22 +86,33 @@ class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBindin
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        // The preferences view shows the settings from the XML layouts, the app list is shown below it
+        val preferencesView = super.onCreateView(inflater, container, savedInstanceState)
+        _binding = FragmentNotificationFilterBinding.inflate(inflater, container, false)
+        binding.preferencesContainer.addView(preferencesView)
+        return binding.root
+    }
 
-        appDatabase = AppDatabase.getInstance(this)
+    override fun onDestroyView() {
+        super.onDestroyView()
+        _binding = null
+    }
 
-        val prefKey = intent.getStringExtra(NotificationsPlugin.PREFERENCE_KEY)!!
-        val preferences = getSharedPreferences(prefKey, MODE_PRIVATE)
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
 
-        setSupportActionBar(binding.toolbarLayout.toolbar)
-        requireNotNull(supportActionBar).setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.setDisplayShowHomeEnabled(true)
+        val context = requireContext()
+        appDatabase = AppDatabase.getInstance(context)
 
-        configureSwitch(preferences)
-
-        ThreadHelper.execute {
-            val packageManager = packageManager
+        ThreadHelper.runOnNewThread {
+            val packageManager = context.packageManager
+            // Don't use the fragment's resources here, the fragment might get detached while this runs
+            val resources = context.resources
             val appList = packageManager.getInstalledApplications(0)
             val count = appList.size
 
@@ -117,7 +126,7 @@ class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBindin
                 val appListInfo = AppListInfo(
                     pkg = appInfo.packageName,
                     name = appInfo.loadLabel(packageManager).toString(),
-                    icon = resizeIcon(appInfo.loadIcon(packageManager)),
+                    icon = resizeIcon(resources, appInfo.loadIcon(packageManager)),
                     isEnabled = appDatabase.isEnabled(appInfo.packageName),
                 )
 
@@ -128,8 +137,8 @@ class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBindin
             // Find apps from work profile
             try {
                 val currentUser = Process.myUserHandle()
-                val launcher = getSystemService<LauncherApps>()
-                val um = getSystemService<UserManager>()
+                val launcher = context.getSystemService<LauncherApps>()
+                val um = context.getSystemService<UserManager>()
                 val userProfiles = um?.userProfiles ?: emptyList()
                 for (userProfile in userProfiles) {
                     if (userProfile == currentUser) {
@@ -138,62 +147,94 @@ class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBindin
 
                     val userActivityList = launcher?.getActivityList(null, userProfile) ?: emptyList()
                     for (app in userActivityList) {
-                        if (allPackageNames.contains(app.applicationInfo.packageName)) {
+                        val appInfo = app.applicationInfo
+                        if (allPackageNames.contains(appInfo.packageName)) {
                             continue
                         }
-
-                        val appInfo = app.applicationInfo
                         if (!canPostNotifications(packageManager, appInfo)) {
                             continue
                         }
+
                         val appListInfo = AppListInfo(
                             pkg = appInfo.packageName,
                             name = appInfo.loadLabel(packageManager).toString(),
-                            icon = resizeIcon(appInfo.loadIcon(packageManager)),
+                            icon = resizeIcon(resources, appInfo.loadIcon(packageManager)),
                             isEnabled = appDatabase.isEnabled(appInfo.packageName),
                         )
-
                         allApps.add(appListInfo)
-                        allPackageNames.add(app.applicationInfo.packageName)
+                        allPackageNames.add(appInfo.packageName)
                     }
                 }
             } catch (e: Exception) {
-                Log.e("NotificationFilterActiv", "Failed to get apps from work profile", e)
+                Log.e("NotificationFilterFrag", "Failed to get apps from work profile", e)
             }
 
-            allApps.sortWith { lhs, rhs -> lhs.name.compareTo(rhs.name, ignoreCase = true) }
+            allApps.sortWith { lhs, rhs ->
+                lhs.name.compareTo(rhs.name, ignoreCase = true)
+            }
+
             mAllApps = allApps
-            apps = ArrayList(allApps)
-            runOnUiThread { displayAppList() }
+            apps = ArrayList(mAllApps)
+
+            view.post {
+                if (_binding != null) {
+                    displayAppList()
+                }
+            }
         }
+
+        requireActivity().addMenuProvider(object : MenuProvider {
+            override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+                menu.add(android.R.string.search_go).apply {
+                    setIcon(R.drawable.ic_search_24)
+                    setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+                    actionView = SearchView(requireContext()).apply {
+                        setOnQueryTextListener(object : SearchView.OnQueryTextListener {
+                            override fun onQueryTextSubmit(query: String?): Boolean = true
+
+                            override fun onQueryTextChange(newText: String?): Boolean {
+                                apps.clear()
+                                if (newText.isNullOrEmpty()) {
+                                    apps.addAll(mAllApps)
+                                } else {
+                                    val query = newText.trim()
+                                    for (s in mAllApps) {
+                                        if (s.name.contains(query, ignoreCase = true)) {
+                                            apps.add(s)
+                                        }
+                                    }
+                                }
+
+                                if (_binding != null) {
+                                    (binding.lvFilterApps.adapter as? AppListAdapter)?.notifyDataSetChanged()
+                                }
+                                return true
+                            }
+                        })
+                    }
+                }
+            }
+
+            override fun onMenuItemSelected(menuItem: MenuItem): Boolean = false
+        }, viewLifecycleOwner, Lifecycle.State.RESUMED)
     }
 
     private fun canPostNotifications(packageManager: PackageManager, appInfo: ApplicationInfo): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || appInfo.targetSdkVersion < Build.VERSION_CODES.TIRAMISU) {
             return true
         }
-        try {
-            val packageInfo = packageManager.getPackageInfo(appInfo.packageName, PackageManager.GET_PERMISSIONS)
-            if (packageInfo.requestedPermissions != null) {
-                for (requestedPermission in packageInfo.requestedPermissions) {
-                    if (Manifest.permission.POST_NOTIFICATIONS == requestedPermission) {
-                        return true
-                    }
-                }
-            }
-            return false
-        } catch (e: PackageManager.NameNotFoundException) {
-            Log.e("NotificationFilterActiv", "Package not found for ${appInfo.packageName}", e)
-            return true
-        }
-    }
 
-    private fun configureSwitch(sharedPreferences: SharedPreferences) {
-        binding.smScreenOffNotification.isChecked = sharedPreferences.getBoolean(NotificationsPlugin.PREF_NOTIFICATION_SCREEN_OFF, false)
-        binding.smScreenOffNotification.setOnCheckedChangeListener { _, isChecked ->
-            sharedPreferences.edit {
-                putBoolean(NotificationsPlugin.PREF_NOTIFICATION_SCREEN_OFF,isChecked)
-            }
+        return try {
+            val packageInfo = packageManager.getPackageInfo(
+                appInfo.packageName,
+                PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()),
+            )
+
+            val requestedPermissions = packageInfo.requestedPermissions ?: return false
+            requestedPermissions.contains(Manifest.permission.POST_NOTIFICATIONS)
+        } catch (_: PackageManager.NameNotFoundException) {
+            // Fail open: this is expected for apps installed only in another profile (e.g. work profile)
+            true
         }
     }
 
@@ -220,13 +261,14 @@ class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBindin
         }
         listView.setOnItemLongClickListener { _, _, i, _ ->
             if (i == 0) return@setOnItemLongClickListener true
-            val builder = AlertDialog.Builder(this)
+            val context = requireContext()
+            val builder = AlertDialog.Builder(context)
             val mView = layoutInflater.inflate(R.layout.popup_notificationsfilter, null)
             builder.setMessage(getString(R.string.extra_options))
 
             val lv = mView.findViewById<ListView>(R.id.extra_options_list)
             val options = arrayOf(getString(R.string.privacy_options))
-            val extraOptionsAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, options)
+            val extraOptionsAdapter = ArrayAdapter(context, android.R.layout.simple_list_item_1, options)
             lv.adapter = extraOptionsAdapter
             builder.setView(mView)
 
@@ -235,7 +277,7 @@ class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBindin
             lv.setOnItemClickListener { _, _, newI, _ ->
                 when (newI) {
                     0 -> {
-                        val myBuilder = AlertDialog.Builder(this)
+                        val myBuilder = AlertDialog.Builder(context)
                         val packageName = apps[i - 1].pkg
 
                         val myView = layoutInflater.inflate(R.layout.privacy_options, null)
@@ -285,9 +327,7 @@ class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBindin
         binding.spinner.visibility = View.GONE
     }
 
-    private fun resizeIcon(icon: Drawable, maxSize: Int = 48): Drawable {
-        val res = resources
-
+    private fun resizeIcon(res: Resources, icon: Drawable, maxSize: Int = 48): Drawable {
         // Convert to display pixels
         val pixelSize = (maxSize * res.displayMetrics.density).toInt()
 
@@ -299,40 +339,11 @@ class NotificationFilterActivity : BaseActivity<ActivityNotificationFilterBindin
         return bitmap.toDrawable(res)
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        onBackPressedDispatcher.onBackPressed()
-        return true
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        super.onCreateOptionsMenu(menu)
-        menu.add(android.R.string.search_go).apply {
-            setIcon(R.drawable.ic_search_24)
-            setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
-            actionView = SearchView(this@NotificationFilterActivity).apply {
-                setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-                    override fun onQueryTextSubmit(query: String?): Boolean = true
-
-                    override fun onQueryTextChange(newText: String?): Boolean {
-                        apps.clear()
-                        if (newText.isNullOrEmpty()) {
-                            apps.addAll(mAllApps)
-                        } else {
-                            val query = newText.trim()
-                            for (s in mAllApps) {
-                                if (s.name.contains(query, ignoreCase = true)) {
-                                    apps.add(s)
-                                }
-                            }
-                        }
-
-                        (binding.lvFilterApps.adapter as? AppListAdapter)?.notifyDataSetChanged()
-                        return true
-                    }
-                })
+    companion object {
+        fun newInstance(pluginKey: String, deviceId: String): NotificationsSettingsFragment {
+            return NotificationsSettingsFragment().apply {
+                setArguments(pluginKey, deviceId, R.xml.notificationsplugin_preferences)
             }
         }
-
-        return true
     }
 }

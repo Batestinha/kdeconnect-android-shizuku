@@ -16,10 +16,11 @@ import android.view.MenuItem
 import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.preference.PreferenceManager
+import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.KdeConnect
+import org.kde.kdeconnect.ui.compose.components.addDeviceDisconnectedOverlay
 import org.kde.kdeconnect.base.BaseActivity
 import org.kde.kdeconnect.extensions.viewBinding
-import org.kde.kdeconnect.ui.MainActivity
 import org.kde.kdeconnect.ui.PermissionsAlertDialogFragment
 import org.kde.kdeconnect_tp.R
 import org.kde.kdeconnect_tp.databinding.ActivityBigscreenBinding
@@ -27,6 +28,7 @@ import org.kde.kdeconnect_tp.databinding.ActivityBigscreenBinding
 class BigscreenActivity : BaseActivity<ActivityBigscreenBinding>() {
 
     private lateinit var deviceId: String
+    private lateinit var plugin: MousePadPlugin
 
     override val binding : ActivityBigscreenBinding by viewBinding(ActivityBigscreenBinding::inflate)
 
@@ -35,11 +37,6 @@ class BigscreenActivity : BaseActivity<ActivityBigscreenBinding>() {
             // The results are ordered by confidence, use the first one
             val firstResult = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
             if (firstResult != null) {
-                val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-                if (plugin == null) {
-                    finish()
-                    return@registerForActivityResult
-                }
                 plugin.sendText(firstResult)
             }
         }
@@ -59,21 +56,22 @@ class BigscreenActivity : BaseActivity<ActivityBigscreenBinding>() {
             binding.micButton.visibility = View.INVISIBLE
         }
 
-        val plugin = KdeConnect.getInstance().getDevicePlugin<MousePadPlugin>(deviceId)
-        if (plugin == null) {
+        val device = KdeConnect.getInstance().getDevice(deviceId)
+        plugin = device?.getPlugin<MousePadPlugin>() ?: run {
             finish()
             return
         }
+        binding.root.addDeviceDisconnectedOverlay(device)
 
-        binding.leftButton.setOnClickListener { v: View? -> plugin.sendLeft() }
-        binding.rightButton.setOnClickListener { v: View? -> plugin.sendRight() }
-        binding.upButton.setOnClickListener { v: View? -> plugin.sendUp() }
-        binding.downButton.setOnClickListener { v: View? -> plugin.sendDown() }
-        binding.selectButton.setOnClickListener { v: View? -> plugin.sendSelect() }
-        binding.homeButton.setOnClickListener { v: View? -> plugin.sendHome() }
-        binding.backButton.setOnClickListener { v: View? -> plugin.sendBack() }
-        binding.closeButton.setOnClickListener { v: View? -> plugin.sendClose() }
-        binding.micButton.setOnClickListener { v: View? ->
+        binding.leftButton.setOnClickListener { plugin.sendLeft() }
+        binding.rightButton.setOnClickListener { plugin.sendRight() }
+        binding.upButton.setOnClickListener { plugin.sendUp() }
+        binding.downButton.setOnClickListener { plugin.sendDown() }
+        binding.selectButton.setOnClickListener { plugin.sendSelect() }
+        binding.homeButton.setOnClickListener { plugin.sendHome() }
+        binding.backButton.setOnClickListener { plugin.sendBack() }
+        binding.closeButton.setOnClickListener { plugin.sendClose() }
+        binding.micButton.setOnClickListener {
             if (plugin.hasMicPermission()) {
                 activateSTT()
             } else {
@@ -81,8 +79,9 @@ class BigscreenActivity : BaseActivity<ActivityBigscreenBinding>() {
                     .setTitle(plugin.displayName)
                     .setMessage(R.string.bigscreen_optional_permission_explanation)
                     .setPermissions(arrayOf(Manifest.permission.RECORD_AUDIO))
-                    .setRequestCode(MainActivity.RESULT_NEEDS_RELOAD)
-                    .create().show(supportFragmentManager, null)
+                    .setReloadPluginsOnResult(false) // We will check again when the user clicks micButton again
+                    .create()
+                    .show(supportFragmentManager, null)
             }
         }
 

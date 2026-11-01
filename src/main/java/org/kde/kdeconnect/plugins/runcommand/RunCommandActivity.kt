@@ -20,7 +20,6 @@ import androidx.compose.ui.platform.toClipEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import org.json.JSONException
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect_tp.R
@@ -30,26 +29,20 @@ class RunCommandActivity : AppCompatActivity() {
 
     val commandList = mutableStateListOf<CommandEntry>()
 
-    private lateinit var deviceId: String
-
+    private lateinit var plugin: RunCommandPlugin
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.d("RunCommandActivity", "Launched")
-        deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)!!
+        val deviceId = intent.getStringExtra(EXTRA_DEVICE_ID)!!
         val device = KdeConnect.getInstance().getDevice(deviceId)
-        val plugin = device?.getPlugin<RunCommandPlugin>()
-        if (plugin == null) {
+        plugin = device?.getPlugin<RunCommandPlugin>() ?: run {
             finish()
             return
         }
 
-        for (obj in plugin.commandList) {
-            try {
-                commandList.add(CommandEntry(obj))
-            } catch (e: JSONException) {
-                Log.e("RunCommand", "Error parsing JSON", e)
-            }
+        for (info in plugin.commandList) {
+            commandList.add(CommandEntry(info))
         }
         commandList.sortBy { it.name.lowercase() }
 
@@ -77,8 +70,7 @@ class RunCommandActivity : AppCompatActivity() {
         command: CommandEntry,
         clipboardManager: Clipboard
     ) {
-        val url =
-            "kdeconnect://runcommand/" + device.deviceId + "/" + command.key
+        val url = "kdeconnect://runcommand/${device.deviceId}/${command.key}"
         val clipData = ClipData.newPlainText("Command", url)
 
         CoroutineScope(Dispatchers.IO).launch {
@@ -94,26 +86,10 @@ class RunCommandActivity : AppCompatActivity() {
 
     private fun updateList() {
         commandList.removeAll(commandList)
-        val plugin = KdeConnect.getInstance().getDevicePlugin<RunCommandPlugin>(deviceId) ?: return
-
-        for (obj in plugin.commandList) {
-            try {
-                commandList.add(CommandEntry(obj))
-            } catch (e: JSONException) {
-                Log.e("RunCommand", "Error parsing JSON", e)
-            }
+        for (info in plugin.commandList) {
+            commandList.add(CommandEntry(info))
         }
         commandList.sortBy { it.name.lowercase() }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        val plugin =
-            KdeConnect.getInstance().getDevicePlugin<RunCommandPlugin>(deviceId)
-        if (plugin == null) {
-            finish()
-            return
-        }
     }
 
     companion object {

@@ -1,7 +1,7 @@
 # KDE Connect Android with Shizuku clipboard sync
 
-This unofficial fork is based on KDE Connect Android 1.36.0, including upstream
-master commit `3c2706a1`, and builds on Shoukaku39's earlier Shizuku clipboard work.
+This unofficial fork is based on KDE Connect Android 1.37.0, including upstream
+master commit `4de397e2`, and builds on Shoukaku39's earlier Shizuku clipboard work.
 
 ## What this fork adds to upstream
 

@@ -252,7 +252,6 @@
   <string name="share_destination_folder_preference">Katalog docelowy</string>
   <string name="share">Udostępnij</string>
   <string name="share_received_file">Udostępnij \"%s\"</string>
-  <string name="title_activity_notification_filter">Filtr powiadomień</string>
   <string name="filter_apps_info">Współdzieli powiadomienia wybranych programów między urządzeniami.</string>
   <string name="show_notification_if_screen_off">Wyślij powiadomienia tylko gdy ekran jest wyłączony</string>
   <string name="add_device_dialog_title">Dodawanie urządzenia</string>
@@ -322,7 +321,6 @@
   <string name="contacts_per_device_confirmation">Twoje kontakty telefoniczne zostaną skopiowane na to urządzenie, aby aplikacja do SMSów KDE Connect i inne mogły ich używać.</string>
   <string name="select_ringtone">Wybierz dzwonek</string>
   <string name="telephony_pref_blocked_title">Zablokowane numery</string>
-  <string name="telephony_pref_blocked_dialog_desc">Nie pokazuj rozmów, ani SMSów z tych numerów. Podawaj jeden numer na wiersz</string>
   <string name="mpris_coverart_description">Okładka dla bieżących multimediów</string>
   <string name="settings_icon_description">Ikona ustawień</string>
   <string name="presenter_fullscreen">Pełny ekran</string>

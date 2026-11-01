@@ -25,6 +25,8 @@
   <string name="pref_plugin_mousepad_desc_tv">Bruk telefonen eller nettbrettet som TV-fjernkontroll</string>
   <string name="pref_plugin_presenter">Fjernkontroll av presentasjon</string>
   <string name="pref_plugin_presenter_desc">Bruk eininga til å byta lysbilete i presentasjonar</string>
+  <string name="pref_plugin_remotekeyboard_ime">Tastatatur-mottakar (via Android-tastatur)</string>
+  <string name="pref_plugin_remotekeyboard_accessibility">Tastatatur-mottakar (via tilgjengelegheit)</string>
   <string name="pref_plugin_remotekeyboard_desc">Ta imot tastetrykk frå eksterne einingar</string>
   <string name="pref_plugin_mpris">Mediekontrollar</string>
   <string name="pref_plugin_mpris_desc">Gje fjernkontroll til mediespelarar</string>
@@ -47,6 +49,7 @@
   <string name="sad_ok">OK :(</string>
   <string name="cancel">Avbryt</string>
   <string name="open_settings">Opna innstillingar</string>
+  <string name="open_accessibility_settings">Opna tilgjengeinnstillingane</string>
   <string name="open_input_settings">Opna tastaturinnstillingar</string>
   <string name="no_permissions">Du må gje tilgang til lesing av varslingar</string>
   <string name="no_permission_mprisreceiver">Du må gje tilgang til varslingar for å kunne kontrollera mediespelarar</string>
@@ -59,6 +62,7 @@
   <string name="open_mousepad">Fjernstyring</string>
   <string name="open_mousepad_tv">TV-fjernkontroll</string>
   <string name="mousepad_info">Dra ein finger over skjermen for å flytta peikaren på datamaskina. Trykk for å klikka, og bruk to eller tre fingrar for høvesvis høgre- og midtknappen. Bruk to fingrar for å rulla. Trykk lenge for å dra og sleppa. Funksjonalitet for gyromus kan du slå på i programtillegg-innstillingane.</string>
+  <string name="mousepad_info_double_tap">Dra ein finger over skjermen for å flytta peikaren på datamaskina. Trykk for å klikka, og bruk to eller tre fingrar for høvesvis høgre- og midtknappen. Bruk to fingrar for å rulla. Trykk to gongar raskt for å dra og sleppa. Funksjonalitet for gyromus kan du slå på i programtillegg-innstillingane.</string>
   <string name="mousepad_info_no_gestures">Flytt fingeren over skjermen for å flytta musepeikaren, og trykk for å klikka med musa.</string>
   <string name="mousepad_keyboard_input_not_supported">Tekst frå tastaturet er ikkje støtta av den para eininga</string>
   <string name="mousepad_single_tap_settings_title">Vel handling for éinfingertrykk</string>
@@ -110,6 +114,7 @@
   <string name="pref_plugin_mousepad_send_keystrokes">Send som tastetrykk</string>
   <string name="mouse_receiver_plugin_description">Ta imot eksterne muserørsler</string>
   <string name="mouse_receiver_plugin_name">Muserørsle-mottakar</string>
+  <string name="mouse_receiver_no_permissions">For å kunna ta imot trykk-data, må du gje tilgjenge­løyva</string>
   <string name="view_status_title">Status</string>
   <string name="battery_status_format">Batteri: %d %%</string>
   <string name="battery_status_low_format">Batteri: %d %% – lågt batterinivå</string>
@@ -229,7 +234,6 @@
   <string name="share_destination_folder_preference">Målmappe</string>
   <string name="share">Del</string>
   <string name="share_received_file">Del «%s»</string>
-  <string name="title_activity_notification_filter">Varslingsfilter</string>
   <string name="filter_apps_info">Varslingar vert synkroniserte for dei valde appane.</string>
   <string name="show_notification_if_screen_off">Send berre varslingar dersom skjermen er av</string>
   <string name="add_device_dialog_title">Legg til eining</string>
@@ -299,7 +303,6 @@
   <string name="contacts_per_device_confirmation">Telefonkontaktane dine vert kopiert over til denne eininga, slik at dei kan brukast av KDE Connect SMS-appen og andre appar.</string>
   <string name="select_ringtone">Vel ringjetone</string>
   <string name="telephony_pref_blocked_title">Blokkerte nummer</string>
-  <string name="telephony_pref_blocked_dialog_desc">Ikkje vis oppringingar eller SMS-ar frå desse telefonnummera. Skriv inn eitt telefonnummer per linje.</string>
   <string name="mpris_coverart_description">Omslagsbilete til gjeldande mediefil</string>
   <string name="settings_icon_description">Innstillingsikon</string>
   <string name="presenter_fullscreen">Fullskjerm</string>

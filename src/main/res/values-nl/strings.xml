@@ -64,6 +64,7 @@
   <string name="open_mousepad">Invoer op afstand</string>
   <string name="open_mousepad_tv">TV op afstand</string>
   <string name="mousepad_info">Veeg met een vinger op het scherm om de muiscursor te verplaatsen. Tik om te klikken en gebruik twee/drie vingers voor rechter en middelste knop. Twee vingers gebruiken voor schuiven. Druk lang voor slepen en loslaten. Functionaliteit van gyro-muis kan ingeschakeld worden vanuit voorkeuren in plug-in</string>
+  <string name="mousepad_info_double_tap">Veeg met een vinger op het scherm om de muiscursor te verplaatsen. Tik om te klikken en gebruik twee/drie vingers voor rechter en middelste knop. Twee vingers gebruiken voor schuiven. tik tweemaal voor slepen en loslaten. Functionaliteit van gyro-muis kan ingeschakeld worden vanuit voorkeuren in plug-in</string>
   <string name="mousepad_info_no_gestures">Veeg met een vinger op het scherm om de muiscursor te verplaatsen, tik om te klikken</string>
   <string name="mousepad_keyboard_input_not_supported">Toetsenbordinvoer wordt niet ondersteund door het gepaarde apparaat</string>
   <string name="mousepad_single_tap_settings_title">Tikactie met één vinger instellen</string>
@@ -236,7 +237,6 @@
   <string name="share_destination_folder_preference">Bestemmingsmap</string>
   <string name="share">Delen</string>
   <string name="share_received_file">\"%s\" delen</string>
-  <string name="title_activity_notification_filter">Filter voor meldingen</string>
   <string name="filter_apps_info">Meldingen zullen gesynchroniseerd worden voor de geselecteerde apps.</string>
   <string name="show_notification_if_screen_off">Meldingen alleen sturen als het scherm uit staat</string>
   <string name="add_device_dialog_title">Apparaat toevoegen</string>
@@ -255,6 +255,7 @@
   <string name="sftp_saf_permission_explanation">Om toegang te hebben tot bestanden op afstand moet u opslaglocaties configureren</string>
   <string name="sftp_manage_storage_permission_explanation">Om toegang tot bestanden op dit apparaat toe te staan moet u toestaan dat KDE Connect de opslag mag beheren.</string>
   <string name="sftp_missing_permission_error">Toegangsrechten ontbreken: toegang tot bestandssysteem</string>
+  <string name="sftp_could_not_determine_ip">Kon lokaal IP-adres niet bepalen</string>
   <string name="no_players_connected">Geen spelers gevonden</string>
   <string name="send_files">Bestanden verzenden</string>
   <string name="use_digitizer">Gebruiken als tekentablet</string>
@@ -306,7 +307,7 @@
   <string name="contacts_per_device_confirmation">Uw telefooncontacten zullen gekopieerd worden naar dit apparaat, ze kunnen dus gebruikt worden door de toepassing KDE Connect SMS en andere toepassingen.</string>
   <string name="select_ringtone">Selecteer een ringtone</string>
   <string name="telephony_pref_blocked_title">Geblokkeerde nummers</string>
-  <string name="telephony_pref_blocked_dialog_desc">Geen oproepen en SMSen vanaf deze nummers tonen. Specificeer één nummer per regel</string>
+  <string name="telephony_pref_blocked_dialog_desc">Geen oproepen vanaf deze nummers tonen. Specificeer één nummer per regel</string>
   <string name="mpris_coverart_description">Cover-illustratie van huidige media</string>
   <string name="settings_icon_description">Pictogram voor instellingen</string>
   <string name="presenter_fullscreen">Volledig scherm</string>
@@ -333,6 +334,7 @@
   <string name="runcommand_notpaired">Apparaat is niet gepaard</string>
   <string name="runcommand_nosuchdevice">Dit apparaat bestaat niet</string>
   <string name="runcommand_noruncommandplugin">Dit apparaat heeft de \"Run Command Plugin\" niet ingeschakeld</string>
+  <string name="runcommand_widget_no_device">Klik op de titel om een apparaat te selecteren.</string>
   <string name="runcommand_category_device_controls_title">Besturing van apparaat</string>
   <string name="runcommand_device_controls_summary">Als uw apparaat besturing ondersteunt, zullen commando\'s die u hebt geconfigureerd daar verschijnen.</string>
   <string name="set_runcommand_name_as_title">set_runcommand_name_as_title</string>

@@ -19,7 +19,6 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
-import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.helpers.NotificationHelper
@@ -125,9 +124,12 @@ class MprisPlugin : Plugin() {
         val isSetVolumeAllowed: Boolean
             get() = volume > -1
 
+        var playbackRate: Double = 1.0
+            internal set
+
         val position: Long
             get() = if (isPlaying) {
-                lastPosition + (SystemClock.elapsedRealtime() - lastPositionTime)
+                lastPosition + ((SystemClock.elapsedRealtime() - lastPositionTime) * playbackRate).toLong()
             } else {
                 lastPosition
             }
@@ -200,9 +202,13 @@ class MprisPlugin : Plugin() {
     }
 
     private val players = ConcurrentHashMap<String, MprisPlayer>()
+    private var fallbackPlayer: String? = null
     private var supportAlbumArtPayload = false
     private val playerStatusUpdated = ConcurrentHashMap<String, () -> Unit>()
     private val playerListUpdated = ConcurrentHashMap<String, () -> Unit>()
+    @Volatile
+    var isControlActivityVisible = false
+
     override val displayName: String
         get() = context.resources.getString(R.string.pref_plugin_mpris)
 
@@ -220,7 +226,11 @@ class MprisPlugin : Plugin() {
         }
     )
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
+
+    override val keepAliveWhenUnreachable: Boolean = true
+
+    override val settingsScope = SettingsScope.APP_WIDE
 
     override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
         return PluginSettingsFragment.newInstance(pluginKey, device.deviceId, R.xml.mprisplugin_preferences)
@@ -238,6 +248,7 @@ class MprisPlugin : Plugin() {
 
     override fun onDestroy() {
         players.clear()
+        notifyPlayerListUpdated() // The player list will be sent again on reconnection
         deregisterPlugin(this)
         MprisMediaSession.instance.removeDevice(this, device.deviceId)
     }
@@ -298,6 +309,9 @@ class MprisPlugin : Plugin() {
                     playerStatus.lastPosition = np.getLong("pos", playerStatus.lastPosition)
                     playerStatus.lastPositionTime = SystemClock.elapsedRealtime()
                 }
+                if (np.has("rate")) {
+                    playerStatus.playbackRate = np.getDouble("rate", playerStatus.playbackRate)
+                }
                 playerStatus.isPlaying = np.getBoolean("isPlaying", playerStatus.isPlaying)
                 playerStatus.isPlayAllowed = np.getBoolean("canPlay", playerStatus.isPlayAllowed)
                 playerStatus.isPauseAllowed = np.getBoolean("canPause", playerStatus.isPauseAllowed)
@@ -316,7 +330,7 @@ class MprisPlugin : Plugin() {
                 notifyPlayerStatusUpdated()
 
                 // Check to see if a stream has stopped playing and we should deliver a notification
-                if (np.has("isPlaying") && !playerStatus.isPlaying && wasPlaying) {
+                if (np.has("isPlaying") && !playerStatus.isPlaying && wasPlaying && !isControlActivityVisible) {
                     showContinueWatchingNotification(playerStatus)
                 }
             }
@@ -327,8 +341,9 @@ class MprisPlugin : Plugin() {
 
         val newPlayerList = np.getStringList("playerList")
         if (newPlayerList != null) {
+            fallbackPlayer = np.getStringOrNull("fallbackPlayer")
             var equals = true
-            newPlayerList.stream().filter { !players.containsKey(it) }.forEach { newPlayer ->
+            newPlayerList.filter { !players.containsKey(it) }.forEach { newPlayer ->
                 equals = false
                 val player = MprisPlayer().apply {
                     playerName = newPlayer
@@ -340,7 +355,7 @@ class MprisPlugin : Plugin() {
             val iter = players.entries.iterator()
             iter.forEach {
                 val oldPlayer = it.key
-                val found = newPlayerList.stream().anyMatch { newPlayer -> newPlayer == oldPlayer }
+                val found = newPlayerList.any { newPlayer -> newPlayer == oldPlayer }
                 if (!found) {
                     // Player got removed
                     equals = false
@@ -369,15 +384,14 @@ class MprisPlugin : Plugin() {
             // Playback was too short
             return
         }
-        ThreadHelper.execute {
+        ThreadHelper.runOnNewThread {
             Thread.sleep(500)
             if (playerStatus.isPlaying) {
                 // Pause was too short. Probably just the gap between songs
-                return@execute
+                return@runOnNewThread
             }
-            val prefs = PreferenceManager.getDefaultSharedPreferences(context)
             val httpUrl = playerStatus.getHttpUrl()
-            if (prefs.getBoolean(context.getString(R.string.mpris_keepwatching_key), true) && httpUrl != null) {
+            if (preferences.getBoolean(context.getString(R.string.mpris_keepwatching_key), true) && httpUrl != null) {
                 try {
                     val transformedUrl = httpUrl
                         .let { VideoUrlsHelper.convertToAndFromYoutubeTvLinks(it) }
@@ -451,11 +465,9 @@ class MprisPlugin : Plugin() {
     }
 
     val playerList: List<String>
-        get() = players.keys.sorted()
+        get() = players.keys.sortedWith(compareBy({ it == fallbackPlayer }, { it }))
 
-    fun getPlayerStatus(player: String?): MprisPlayer? = if (player == null) {
-        null
-    } else players[player]
+    fun getPlayerStatus(player: String?): MprisPlayer? = player?.let { players[it] }
 
     fun getEmptyPlayer(): MprisPlayer = MprisPlayer()
 
@@ -465,7 +477,7 @@ class MprisPlugin : Plugin() {
          *
          * @return null if no players are playing, a playing player otherwise
          */
-        get() = players.values.stream().filter(MprisPlayer::isPlaying).findFirst().orElse(null)
+        get() = players.values.filter(MprisPlayer::isPlaying).minByOrNull { it.playerName == fallbackPlayer }
 
     fun hasPlayer(player: MprisPlayer): Boolean = players.containsValue(player)
 

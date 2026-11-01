@@ -10,7 +10,7 @@ import android.util.Log
 import org.kde.kdeconnect.Device
 
 object PluginFactory {
-    annotation class LoadablePlugin  //Annotate plugins with this so PluginFactory finds them
+    annotation class LoadablePlugin  // Annotate plugins with this so PluginFactory finds them
 
     private var pluginInfo: Map<String, PluginInfo> = mapOf()
 
@@ -24,7 +24,7 @@ object PluginFactory {
         } catch (e: Exception) {
             throw RuntimeException(e)
         }
-        Log.i("PluginFactory", "Loaded " + pluginInfo.size + " plugins")
+        Log.i("PluginFactory", "Loaded ${pluginInfo.size} plugins")
     }
 
     val availablePlugins: Set<String>
@@ -36,7 +36,7 @@ object PluginFactory {
 
     fun getPluginInfo(pluginKey: String): PluginInfo = pluginInfo[pluginKey]!!
 
-    fun sortPluginList(plugins: List<String>): List<String> {
+    fun sortPluginList(plugins: Collection<String>): List<String> {
         return plugins.sortedBy { pluginInfo[it]?.displayName }
     }
 
@@ -70,12 +70,13 @@ object PluginFactory {
         val isEnabledByDefault: Boolean,
         val hasSettings: Boolean,
         val listenToUnpaired: Boolean,
+        val keepAliveWhenUnreachable: Boolean,
         supportedPacketTypes: Array<String>,
         outgoingPacketTypes: Array<String>,
         val instantiableClass: Class<out Plugin>,
     ) {
         internal constructor(p: Plugin) : this(p.displayName, p.description,
-            p.isEnabledByDefault, p.hasSettings(), p.listensToUnpairedDevices(),
+            p.isEnabledByDefault, p.hasSettings, p.listenToUnpairedDevices, p.keepAliveWhenUnreachable,
             p.supportedPacketTypes, p.outgoingPacketTypes, p.javaClass)
 
         val supportedPacketTypes: Set<String> = supportedPacketTypes.toSet()

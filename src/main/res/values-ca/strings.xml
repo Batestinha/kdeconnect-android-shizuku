@@ -64,6 +64,7 @@
   <string name="open_mousepad">Entrada remota</string>
   <string name="open_mousepad_tv">Comandament a distància de TV</string>
   <string name="mousepad_info">Moveu un dit per la pantalla per a moure el cursor del ratolí. Toqueu per a un clic, i empreu dos/tres dits per als botons dret i mig. Useu 2 dits per a desplaçar. Empreu un toc llarg per a arrossegar i deixar anar. La funcionalitat giroscòpica dels ratolins es pot activar des de les preferències del connector</string>
+  <string name="mousepad_info_double_tap">Moveu un dit per la pantalla per a moure el cursor del ratolí. Toqueu per a un clic, i empreu dos/tres dits per als botons dret i mig. Useu 2 dits per a desplaçar. Empreu un toc doble per a arrossegar i deixar anar. La funcionalitat giroscòpica dels ratolins es pot activar des de les preferències del connector</string>
   <string name="mousepad_info_no_gestures">Moveu un dit a la pantalla per a moure el cursor del ratolí, toqueu per a fer un clic.</string>
   <string name="mousepad_keyboard_input_not_supported">El dispositiu aparellat no permet l\'entrada de teclat</string>
   <string name="mousepad_single_tap_settings_title">Estableix l\'acció de tocar amb un dit</string>
@@ -236,7 +237,6 @@
   <string name="share_destination_folder_preference">Directori de destinació</string>
   <string name="share">Comparteix</string>
   <string name="share_received_file">Comparteix «%s»</string>
-  <string name="title_activity_notification_filter">Filtre de notificacions</string>
   <string name="filter_apps_info">Les notificacions se sincronitzaran per a les aplicacions seleccionades.</string>
   <string name="show_notification_if_screen_off">Envia les notificacions només si la pantalla està apagada</string>
   <string name="add_device_dialog_title">Afegeix un dispositiu</string>
@@ -255,6 +255,7 @@
   <string name="sftp_saf_permission_explanation">Per a accedir remotament als fitxers cal configurar les ubicacions d\'emmagatzematge</string>
   <string name="sftp_manage_storage_permission_explanation">Per a permetre l\'accés remot als fitxers d\'aquest dispositiu, haureu de permetre que el KDE Connect gestioni l\'emmagatzematge.</string>
   <string name="sftp_missing_permission_error">Permisos que manquen: accés al sistema de fitxers</string>
+  <string name="sftp_could_not_determine_ip">No s\'ha pogut determinar l\'adreça IP local</string>
   <string name="no_players_connected">No s\'ha trobat cap reproductor</string>
   <string name="send_files">Envia fitxers</string>
   <string name="use_digitizer">Ús com a tauleta de dibuix</string>
@@ -306,7 +307,7 @@
   <string name="contacts_per_device_confirmation">Els contactes del telèfon es copiaran en aquest dispositiu, de manera que puguin ser utilitzats per l\'aplicació d\'SMS del KDE Connect i altres aplicacions.</string>
   <string name="select_ringtone">Seleccioneu un to de la trucada</string>
   <string name="telephony_pref_blocked_title">Números blocats</string>
-  <string name="telephony_pref_blocked_dialog_desc">No es mostren ni les trucades ni els SMS d\'aquests números. Especifiqueu un número per línia</string>
+  <string name="telephony_pref_blocked_dialog_desc">No es mostren les trucades d\'aquests números. Especifiqueu un número per línia</string>
   <string name="mpris_coverart_description">Caràtula del fitxer multimèdia actual</string>
   <string name="settings_icon_description">Icona d\'arranjament</string>
   <string name="presenter_fullscreen">Pantalla completa</string>
@@ -333,6 +334,7 @@
   <string name="runcommand_notpaired">El dispositiu no està aparellat</string>
   <string name="runcommand_nosuchdevice">El dispositiu no existeix</string>
   <string name="runcommand_noruncommandplugin">Aquest dispositiu no té activat el connector d\'executar ordres</string>
+  <string name="runcommand_widget_no_device">Feu clic al títol per a seleccionar un dispositiu.</string>
   <string name="runcommand_category_device_controls_title">Controls del dispositiu</string>
   <string name="runcommand_device_controls_summary">Si el vostre dispositiu admet controls de dispositiu, les ordres que hàgiu configurat apareixeran allí.</string>
   <string name="set_runcommand_name_as_title">estableix_nom_ordre_executar_com_a_títol</string>

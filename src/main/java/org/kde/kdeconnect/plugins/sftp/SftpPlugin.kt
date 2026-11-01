@@ -16,19 +16,21 @@ import android.os.storage.StorageManager
 import android.provider.Settings
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
-import org.json.JSONException
-import org.json.JSONObject
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import org.kde.kdeconnect.NetworkPacket
+import org.kde.kdeconnect.helpers.JsonHelper.json
 import org.kde.kdeconnect.helpers.getLocalIpAddress
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect.ui.AlertDialogFragment
 import org.kde.kdeconnect.ui.DeviceSettingsAlertDialogFragment
-import org.kde.kdeconnect.ui.MainActivity
 import org.kde.kdeconnect.ui.PluginSettingsFragment
 import org.kde.kdeconnect.ui.StartActivityAlertDialogFragment
 import org.kde.kdeconnect_tp.BuildConfig
 import org.kde.kdeconnect_tp.R
+import java.nio.file.Path
 
 @LoadablePlugin
 class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
@@ -54,9 +56,8 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
                 .setPositiveButton(R.string.open_settings)
                 .setNegativeButton(R.string.cancel)
                 .setIntentAction(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                .setIntentUrl("package:" + BuildConfig.APPLICATION_ID)
-                .setStartForResult(true)
-                .setRequestCode(MainActivity.RESULT_NEEDS_RELOAD)
+                .setIntentUrl("package:${BuildConfig.APPLICATION_ID}")
+                .setReloadPluginsOnResult(true)
                 .create()
         } else {
             DeviceSettingsAlertDialogFragment.Builder()
@@ -107,6 +108,13 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
                 pathNames.add(sv.getDescription(context))
                 paths.add(directory.path)
             }
+            if (paths.isEmpty()) {
+                device.sendPacket(NetworkPacket(PACKET_TYPE_SFTP).apply {
+                    this["errorMessage"] = context.getString(R.string.sftp_no_storage_locations_configured)
+                })
+                return true
+            }
+            server.setNativeStorageDirs(paths.map { Path.of(it) })
         } else {
             val storageInfoList = SftpSettingsFragment.getStorageInfoList(context, this)
             storageInfoList.sortBy { it.uri }
@@ -118,7 +126,15 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
             }
             getPathsAndNamesForStorageInfoList(paths, pathNames, storageInfoList)
             storageInfoList.removeChildren()
-            server.setSafRoots(storageInfoList)
+            server.setSafStorageDirs(storageInfoList)
+        }
+
+        val localIp = getLocalIpAddress()?.hostAddress
+        if (localIp == null) {
+            device.sendPacket(NetworkPacket(PACKET_TYPE_SFTP).apply {
+                this["errorMessage"] = context.getString(R.string.sftp_could_not_determine_ip)
+            })
+            return true
         }
 
         if (!server.start()) {
@@ -128,7 +144,7 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
         preferences.registerOnSharedPreferenceChangeListener(this)
 
         device.sendPacket(NetworkPacket(PACKET_TYPE_SFTP).apply {
-            this["ip"] = getLocalIpAddress()?.hostAddress!!
+            this["ip"] = localIp
             this["port"] = server.port
             this["user"] = SimpleSftpServer.USER
             this["password"] = server.regeneratePassword()
@@ -209,9 +225,9 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
 
     override val outgoingPacketTypes: Array<String> = arrayOf(PACKET_TYPE_SFTP)
 
-    override fun hasSettings(): Boolean = !SimpleSftpServer.SUPPORTS_NATIVEFS
+    override val hasSettings: Boolean = !SimpleSftpServer.SUPPORTS_NATIVEFS
 
-    override fun supportsDeviceSpecificSettings(): Boolean = true
+    override val settingsScope = SettingsScope.PER_DEVICE
 
     override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
         return SftpSettingsFragment.newInstance(pluginKey, device.deviceId, R.xml.sftpplugin_preferences)
@@ -233,24 +249,27 @@ class SftpPlugin : Plugin(), OnSharedPreferenceChangeListener {
         val isFileUri: Boolean = uri.scheme == ContentResolver.SCHEME_FILE
         val isContentUri: Boolean = uri.scheme == ContentResolver.SCHEME_CONTENT
 
-        @Throws(JSONException::class)
-        fun toJSON(): JSONObject {
-            return JSONObject().apply {
-                put(KEY_DISPLAY_NAME, displayName)
-                put(KEY_URI, uri.toString())
-            }
+        private fun toSerialized() = SerializedStorageInfo(displayName, uri.toString())
+
+        fun serialize(): String = json.encodeToString(toSerialized())
+
+        // Persisted in the device preferences, so field names must not change
+        @Serializable
+        private class SerializedStorageInfo(
+            @SerialName("DisplayName") val displayName: String,
+            @SerialName("Uri") val uri: String,
+        ) {
+            fun toStorageInfo() = StorageInfo(displayName, uri.toUri())
         }
 
         companion object {
-            private const val KEY_DISPLAY_NAME = "DisplayName"
-            private const val KEY_URI = "Uri"
+            @Throws(SerializationException::class)
+            fun unserialize(s: String): StorageInfo = json.decodeFromString<SerializedStorageInfo>(s).toStorageInfo()
 
-            @Throws(JSONException::class)
-            fun fromJSON(jsonObject: JSONObject): StorageInfo {
-                val displayName = jsonObject.getString(KEY_DISPLAY_NAME)
-                val uri = jsonObject.getString(KEY_URI).toUri()
-                return StorageInfo(displayName, uri)
-            }
+            fun serializeList(list: List<StorageInfo>): String = json.encodeToString(list.map { it.toSerialized() })
+
+            @Throws(SerializationException::class)
+            fun unserializeList(s: String): List<StorageInfo> = json.decodeFromString<List<SerializedStorageInfo>>(s).map { it.toStorageInfo() }
         }
     }
 

@@ -27,7 +27,6 @@ import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect.plugins.remotekeyboardime.RemoteKeyboardIMEPlugin
 import org.kde.kdeconnect.plugins.remotekeyboardime.RemoteKeyboardService
-import org.kde.kdeconnect.ui.MainActivity
 import org.kde.kdeconnect.ui.StartActivityAlertDialogFragment
 import org.kde.kdeconnect_tp.R
 
@@ -41,8 +40,7 @@ class RemoteKeyboardPlugin : Plugin() {
     override val description: String
         get() = context.resources.getString(R.string.pref_plugin_remotekeyboard_desc)
 
-    override val minSdk: Int
-        get() = Build.VERSION_CODES.O
+    override val minSdk: Int = Build.VERSION_CODES.O
 
     override val permissionExplanationDialog: DialogFragment
         get() = StartActivityAlertDialogFragment.Builder()
@@ -51,8 +49,7 @@ class RemoteKeyboardPlugin : Plugin() {
             .setPositiveButton(R.string.open_accessibility_settings)
             .setNegativeButton(R.string.cancel)
             .setIntentAction(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-            .setStartForResult(true)
-            .setRequestCode(MainActivity.RESULT_NEEDS_RELOAD)
+            .setReloadPluginsOnResult(true)
             .create()
 
     companion object {
@@ -60,7 +57,7 @@ class RemoteKeyboardPlugin : Plugin() {
         const val PACKET_TYPE_MOUSEPAD_ECHO: String = "kdeconnect.mousepad.echo"
         const val PACKET_TYPE_MOUSEPAD_KEYBOARDSTATE: String = "kdeconnect.mousepad.keyboardstate"
 
-        private const val LOG_TAG = "RemoteKeyboardPlugin"
+        private const val TAG = "RemoteKeyboardPlugin"
     }
 
     override fun checkRequiredPermissions(): Boolean {
@@ -104,7 +101,7 @@ class RemoteKeyboardPlugin : Plugin() {
         }
 
         if (!handleKey(np)) {
-            Log.i(LOG_TAG, "Could not handle event!")
+            Log.i(TAG, "Could not handle event!")
             return false
         }
 

@@ -4,7 +4,7 @@ import android.os.SystemClock
 import org.kde.kdeconnect.helpers.ThreadHelper
 import java.net.InetAddress
 
-class DeviceHost private constructor(private val host: String) {
+class DeviceHost private constructor(val host: String) {
 
     data class PingResult(val latency: Long?)
 
@@ -17,7 +17,7 @@ class DeviceHost private constructor(private val host: String) {
      * @param callback Callback for updating UI elements
      */
     fun checkReachable(callback: () -> Unit) {
-        ThreadHelper.execute {
+        ThreadHelper.runOnNewThread {
             try {
                 val address = InetAddress.getByName(this.host)
                 val startTime = SystemClock.elapsedRealtime()
@@ -57,7 +57,5 @@ class DeviceHost private constructor(private val host: String) {
                 null
             }
         }
-
-        val BROADCAST: DeviceHost = DeviceHost("255.255.255.255")
     }
 }

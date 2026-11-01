@@ -12,7 +12,6 @@ import android.app.PendingIntent
 import android.app.RemoteInput
 import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Bitmap
@@ -30,13 +29,15 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.createBitmap
 import androidx.fragment.app.DialogFragment
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.put
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.helpers.AppsHelper.appNameLookup
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
-import org.kde.kdeconnect.ui.MainActivity
 import org.kde.kdeconnect.ui.PluginSettingsFragment
 import org.kde.kdeconnect.ui.StartActivityAlertDialogFragment
 import org.kde.kdeconnect_tp.R
@@ -54,7 +55,6 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
     private val pendingIntents = HashMap<String, RepliableNotification>()
     private val pendingActions = mutableMapOf<String, MutableList<Notification.Action>>()
     private var serviceReady = false
-    private lateinit var sharedPreferences: SharedPreferences
     private lateinit var keyguardManager: KeyguardManager
     private lateinit var mainHandler: Handler
     private val postedNotificationsLock = Any()
@@ -65,13 +65,10 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
     override val description: String
         get() = context.getString(R.string.pref_plugin_notifications_desc)
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
 
-    override fun getSettingsFragment(activity: Activity): PluginSettingsFragment? {
-        val intent = Intent(activity, NotificationFilterActivity::class.java)
-        intent.putExtra(PREFERENCE_KEY, this.sharedPreferencesName)
-        activity.startActivity(intent)
-        return null
+    override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
+        return NotificationsSettingsFragment.newInstance(pluginKey, device.deviceId)
     }
 
     override fun checkRequiredPermissions(): Boolean {
@@ -80,12 +77,10 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
 
     override fun onCreate() {
         appDatabase = AppDatabase.getInstance(context)
-        sharedPreferences = context.getSharedPreferences(sharedPreferencesName, Context.MODE_PRIVATE)
         keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
         mainHandler = Handler(Looper.getMainLooper())
         NotificationReceiver.RunCommand(context) { service ->
             service.addListener(this@NotificationsPlugin)
-            serviceReady = service.isConnected
         }
     }
 
@@ -141,14 +136,13 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
             postedNotifications.add(key)
         }
 
-        val sendOnlyIfLocked = sharedPreferences.getBoolean(PREF_NOTIFICATION_SCREEN_OFF, false)
-        val isLocked = keyguardManager.isKeyguardLocked
-        if (!sendOnlyIfLocked || isLocked) {
-            sendNotificationWithDelay(statusBarNotification)
-        }
+        // If the user only wants to be alerted while the phone is locked, still send the notification but as silent
+        val alertOnlyIfLocked = preferences.getBoolean(context.getString(R.string.pref_notification_screen_off_key), false)
+        val silent = alertOnlyIfLocked && !keyguardManager.isKeyguardLocked
+        sendNotificationWithDelay(statusBarNotification, silent)
     }
 
-    private fun sendNotificationWithDelay(statusBarNotification: StatusBarNotification) {
+    private fun sendNotificationWithDelay(statusBarNotification: StatusBarNotification, silent: Boolean) {
         val key = getNotificationKeyCompat(statusBarNotification)
         synchronized(postedNotificationsLock) {
             cancelDelayedNotification(key)
@@ -161,7 +155,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
                         return@Runnable
                     }
                 }
-                sendNotification(statusBarNotification, false)
+                sendNotification(statusBarNotification, silent)
             })
             delayedNotification.obj = key
             mainHandler.sendMessageDelayed(delayedNotification, NOTIFICATION_SYNC_DELAY_MS)
@@ -172,11 +166,11 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
         mainHandler.removeCallbacksAndMessages(key)
     }
 
-    // isPreexisting is true for notifications that we are sending in response to a request command
-    // and that we want to send with the "silent" flag set
+    // silent is true for notifications that shouldn't alert the user on the other end, eg: preexisting notifications
+    // that we are sending in response to a request command, or new ones while the screen is on if the user asked so
     private fun sendNotification(
         statusBarNotification: StatusBarNotification,
-        isPreexisting: Boolean
+        silent: Boolean
     ) {
         val notification = statusBarNotification.notification
 
@@ -184,6 +178,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
             || (notification.flags and Notification.FLAG_ONGOING_EVENT) != 0
             || (notification.flags and Notification.FLAG_LOCAL_ONLY) != 0
             || (notification.flags and NotificationCompat.FLAG_GROUP_SUMMARY) != 0 // The notification that groups other notifications
+            || Notification.CATEGORY_TRANSPORT == notification.category // Media playback controls are handled by the MPRIS plugin
         ) {
             // This is not a notification we want
             return
@@ -194,6 +189,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
             // Notification excluded by the user
             return
         }
+
         if ("com.android.systemui" == packageName) {
             if ("low_battery" == statusBarNotification.tag) {
                 // HACK: Android low battery notification are posted again every few seconds. Ignore them, as we already have a battery indicator.
@@ -210,6 +206,17 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
         if ("org.kde.kdeconnect_tp" == packageName || "org.kde.kdeconnect_tp.debug" == packageName) {
             // Don't send our own notifications
             return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                if (context.packageManager.isPackageSuspended(packageName)) {
+                    // App is paused/suspended by the user (Digital Wellbeing, Focus Mode, etc.)
+                    return
+                }
+            } catch (_: PackageManager.NameNotFoundException) {
+                // Package not found or uninstalled
+            }
         }
 
         val key = getNotificationKeyCompat(statusBarNotification)
@@ -243,11 +250,12 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
 
         np["actions"] = extractActions(notification, key)
 
+        val onlyAlertOnce = (notification.flags and Notification.FLAG_ONLY_ALERT_ONCE) != 0
         np["id"] = key
         np["isClearable"] = statusBarNotification.isClearable
         np["appName"] = appNameLookup(context, packageName)
         np["time"] = statusBarNotification.postTime.toString()
-        np["silent"] = isPreexisting
+        np["silent"] = silent || (isUpdate && onlyAlertOnce)
 
         if (!appDatabase.getPrivacy(packageName, AppDatabase.PrivacyOptions.BLOCK_CONTENTS)) {
             val rn = extractRepliableNotification(statusBarNotification)
@@ -261,7 +269,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
             var conversationLength = 0
             if (isConversation) {
                 val conversation = extractConversation(messagingStyle)
-                conversationLength = conversation.length()
+                conversationLength = conversation.size
                 if (conversationLength != 0) {
                     np["conversation"] = conversation
                 }
@@ -342,45 +350,44 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
         return null
     }
 
-    private fun extractActions(notification: Notification, key: String): JSONArray? {
+    private fun extractActions(notification: Notification, key: String): JsonArray? {
         val notiActions = notification.actions
         if (notiActions.isNullOrEmpty()) {
             return null
         }
 
-        val jsonArray = JSONArray()
-        for (action in notiActions) {
-            val title = action.title
-                ?: continue
+        return buildJsonArray {
+            for (action in notiActions) {
+                val title = action.title
+                    ?: continue
 
-            // Check whether it is a reply action. We have special treatment for them
-            if (action.remoteInputs?.isNotEmpty() == true) {
-                continue
+                // Check whether it is a reply action. We have special treatment for them
+                if (action.remoteInputs?.isNotEmpty() == true) {
+                    continue
+                }
+
+                add(title.toString())
+
+                pendingActions.getOrPut(key) { mutableListOf() }.add(action)
             }
-
-            jsonArray.put(title.toString())
-
-            pendingActions.getOrPut(key) { mutableListOf() }.add(action)
         }
-
-        return jsonArray
     }
 
-    private fun extractConversation(messagingStyle: NotificationCompat.MessagingStyle?): JSONArray {
+    private fun extractConversation(messagingStyle: NotificationCompat.MessagingStyle?): JsonArray {
         if (messagingStyle == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-            return JSONArray()
+            return JsonArray(emptyList())
         }
         val messages = messagingStyle.messages
-        val conversation = JSONArray()
-        for (message in messages) {
-            val sender = message?.person?.name?.toString() ?: context.getString(R.string.unknown_sender)
-            val content = message.text?.toString() ?: ""
-            conversation.put(JSONObject().apply {
-                put("sender", sender)
-                put("content", content)
-            })
+        return buildJsonArray {
+            for (message in messages) {
+                val sender = message?.person?.name?.toString() ?: context.getString(R.string.unknown_sender)
+                val content = message.text?.toString() ?: ""
+                addJsonObject {
+                    put("sender", sender)
+                    put("content", content)
+                }
+            }
         }
-        return conversation
     }
 
     private fun drawableToBitmap(drawable: Drawable?): Bitmap? {
@@ -423,7 +430,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
         try {
             repliableNotification.pendingIntent.send(context, 0, localIntent)
         } catch (e: PendingIntent.CanceledException) {
-            Log.e(TAG, "replyToNotification error: " + e.message)
+            Log.e(TAG, "replyToNotification error: ${e.message}")
         }
         pendingIntents.remove(id)
     }
@@ -465,7 +472,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
                 ticker = extraText
             }
         } catch (e: Exception) {
-            Log.e(TAG, "problem parsing notification extras for " + notification.tickerText, e)
+            Log.e(TAG, """problem parsing notification extras for ${notification.tickerText}""", e)
         }
 
         if (ticker.isEmpty()) {
@@ -515,7 +522,11 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
             val dismissedId = np.getString("cancel")
             currentNotifications.remove(dismissedId)
             NotificationReceiver.RunCommand(context) { service ->
-                service.cancelNotification(dismissedId)
+                try {
+                    service.cancelNotification(dismissedId)
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "Can't cancel notification", e)
+                }
             }
         } else if (np.has("requestReplyId") && np.has("message")) {
             replyToNotification(np.getString("requestReplyId"), np.getString("message"))
@@ -531,8 +542,7 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
             .setPositiveButton(R.string.open_settings)
             .setNegativeButton(R.string.cancel)
             .setIntentAction("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-            .setStartForResult(true)
-            .setRequestCode(MainActivity.RESULT_NEEDS_RELOAD)
+            .setReloadPluginsOnResult(true)
             .create()
 
     override val supportedPacketTypes = arrayOf(
@@ -549,8 +559,6 @@ class NotificationsPlugin : Plugin(), NotificationReceiver.NotificationListener 
         private const val PACKET_TYPE_NOTIFICATION_REQUEST = "kdeconnect.notification.request"
         private const val PACKET_TYPE_NOTIFICATION_REPLY = "kdeconnect.notification.reply"
         private const val PACKET_TYPE_NOTIFICATION_ACTION = "kdeconnect.notification.action"
-        const val PREFERENCE_KEY = "prefKey"
-        const val PREF_NOTIFICATION_SCREEN_OFF = "pref_notification_screen_off"
         private const val NOTIFICATION_SYNC_DELAY_MS = 50L
 
         private const val TAG = "KDE/NotificationsPlugin"
