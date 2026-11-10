@@ -8,7 +8,7 @@ package org.kde.kdeconnect.backends.bluetooth
 
 import android.bluetooth.BluetoothSocket
 import android.util.Log
-import org.kde.kdeconnect.helpers.ThreadHelper.execute
+import org.kde.kdeconnect.helpers.ThreadHelper
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
@@ -186,7 +186,7 @@ class ConnectionMultiplexer(private val socket: BluetoothSocket) : Closeable {
     init {
         channels[DEFAULT_CHANNEL] = Channel(this, DEFAULT_CHANNEL)
         sendProtocolVersion()
-        execute(ListenRunnable(socket))
+        ThreadHelper.runOnNewThread(ListenRunnable(socket))
     }
 
     @Throws(IOException::class)
@@ -406,8 +406,8 @@ class ConnectionMultiplexer(private val socket: BluetoothSocket) : Closeable {
             val channelId = UUID(channelIdMostSigBits, channelIdLeastSigBits)
             if (!receivedProtocolVersion && type != MESSAGE_PROTOCOL_VERSION) {
                 Log.w("ConnectionMultiplexer", "Received invalid message '$message'")
-                Log.w("ConnectionMultiplexer", "'data_buffer:(" + byteArrayToHexString(data) + ") ")
-                Log.w("ConnectionMultiplexer", "as string: '${data.contentToString()}' ")
+                Log.w("ConnectionMultiplexer", "'data_buffer:(${byteArrayToHexString(data)})")
+                Log.w("ConnectionMultiplexer", "as string: '${data.contentToString()}'")
 
                 throw IOException("Did not receive protocol version message!")
             }
@@ -485,7 +485,7 @@ class ConnectionMultiplexer(private val socket: BluetoothSocket) : Closeable {
                     receivedProtocolVersion = true
                 }
                 else -> {
-                    throw IOException("Invalid message type " + type.toInt())
+                    throw IOException("Invalid message type ${type.toInt()}")
                 }
             }
         }

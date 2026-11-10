@@ -79,6 +79,7 @@ SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted
     <string name="open_mousepad">Remote input</string>
     <string name="open_mousepad_tv">TV remote</string>
     <string name="mousepad_info">Move a finger on the screen to move the mouse cursor. Tap for a click, and use two/three fingers for right and middle buttons. Use 2 fingers to scroll. Use a long press to drag\'n drop. Gyro mouse functionality can be enabled from plugin preferences</string>
+    <string name="mousepad_info_double_tap">Move a finger on the screen to move the mouse cursor. Tap for a click, and use two/three fingers for right and middle buttons. Use 2 fingers to scroll. Double tap to drag\'n drop. Gyro mouse functionality can be enabled from plugin preferences</string>
     <string name="mousepad_info_no_gestures">Move a finger on the screen to move the mouse cursor, tap for a click.</string>
     <string name="mousepad_keyboard_input_not_supported">Keyboard input not supported by the paired device</string>
     <string name="mousepad_single_tap_settings_title">Set one finger tap action</string>
@@ -317,7 +318,6 @@ SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted
     <string name="share_destination_folder_preference">Destination directory</string>
     <string name="share">Share</string>
     <string name="share_received_file">Share \"%s\"</string>
-    <string name="title_activity_notification_filter">Notification filter</string>
     <string name="filter_apps_info">Notifications will be synchronized for the selected apps.</string>
     <string name="show_notification_if_screen_off">Send notifications only if the screen is off</string>
     <string name="add_device_dialog_title">Add device</string>
@@ -340,6 +340,7 @@ SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted
     <string name="sftp_saf_permission_explanation">To access files remotely you have to configure storage locations</string>
     <string name="sftp_manage_storage_permission_explanation">To allow remote access to files on this device you need to allow KDE Connect to manage the storage.</string>
     <string name="sftp_missing_permission_error">Permissions missing: filesystem access</string>
+    <string name="sftp_could_not_determine_ip">Could not determine local IP address</string>
     <string name="no_players_connected">No players found</string>
     <string name="send_files">Send files</string>
     <string name="use_digitizer">Use as drawing tablet</string>
@@ -412,6 +413,10 @@ SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted
 
     <string name="presenter_fullscreen">Fullscreen</string>
     <string name="presenter_exit">Exit presentation</string>
+    <string name="presenter_change_zoom">Change zoom</string>
+    <string name="presenter_zoom">Zoom</string>
+    <string name="presenter_zoom_in">Zoom in</string>
+    <string name="presenter_zoom_out">Zoom out</string>
     <string name="presenter_lock_tip">You can lock your device and use the volume keys to go to the previous/next slide</string>
 
     <string name="add_command">Add a command</string>
@@ -638,7 +643,6 @@ SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted
     <string name="findmyphone_open_settings_for_camera">Grant camera permission in app settings to use the flashlight</string>
     <string name="no_notifications">Notifications are disabled, you won\'t receive incoming pairing request notifications.</string>
 
-
     <string name="mpris_keepwatching">Continue playing</string>
     <string name="mpris_keepwatching_key" translatable="false">mpris_keepwatching_enabled</string>
     <string name="mpris_keepwatching_settings_title">Continue playing</string>
@@ -669,4 +673,6 @@ SPDX-License-Identifier: GPL-2.0-only OR GPL-3.0-only OR LicenseRef-KDE-Accepted
     <string name="pref_mpris_volume_control_key" translatable="false">mpris_volume_control_enabled</string>
     <string name="pref_mpris_volume_control_title">Hardware volume keys</string>
     <string name="pref_mpris_volume_control_summary">Control the connected device\'s media volume using this phone\'s hardware buttons</string>
+
+    <string name="pref_notification_screen_off_key" translatable="false">pref_notification_screen_off</string>
 </resources>

@@ -9,17 +9,17 @@ package org.kde.kdeconnect.plugins.runcommand
 
 import android.app.Activity
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.preference.PreferenceManager
-import org.json.JSONArray
-import org.json.JSONException
-import org.json.JSONObject
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
 import org.kde.kdeconnect.NetworkPacket
+import org.kde.kdeconnect.helpers.JsonHelper.json
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect.ui.PluginSettingsFragment
@@ -29,7 +29,7 @@ import androidx.core.content.edit
 @LoadablePlugin
 class RunCommandPlugin : Plugin() {
 
-    val commandList = ArrayList<JSONObject>()
+    val commandList = ArrayList<CommandInfo>()
     private val callbacks = ArrayList<CommandsChangedCallback>()
     val commandItems = ArrayList<CommandEntry>()
     val output = SnapshotStateList<RunCommandOutput>()
@@ -41,7 +41,6 @@ class RunCommandPlugin : Plugin() {
     // we can go back and update its color once we know whether it succeeded or failed.
     private val commandLineIndexById = HashMap<Int, Int>()
 
-    private lateinit var sharedPreferences: SharedPreferences
     private var canAddCommand = false
 
     fun addCommandsUpdatedCallback(newCallback: CommandsChangedCallback) {
@@ -69,7 +68,11 @@ class RunCommandPlugin : Plugin() {
     override val description: String
         get() = context.resources.getString(R.string.pref_plugin_runcommand_desc)
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
+
+    override val keepAliveWhenUnreachable: Boolean = true
+
+    override val settingsScope = SettingsScope.APP_WIDE
 
     override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
         return PluginSettingsFragment.newInstance(pluginKey, device.deviceId, R.xml.runcommand_preferences)
@@ -85,8 +88,13 @@ class RunCommandPlugin : Plugin() {
     }
 
     override fun onCreate() {
-        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
         requestCommandList()
+    }
+
+    override fun onDestroy() {
+        // We won't get commandFinished for the commands that were running, so stop tracking them
+        runningProcesses.clear()
+        commandRunning.value = false
     }
 
     override fun onPacketReceived(np: NetworkPacket): Boolean {
@@ -94,17 +102,13 @@ class RunCommandPlugin : Plugin() {
             commandList.clear()
             try {
                 commandItems.clear()
-                val obj = JSONObject(np.getString("commandList"))
-                for (s in obj.keys()) {
-                    val o = obj.getJSONObject(s)
-                    o.put("key", s)
-                    commandList.add(o)
-
+                val obj = json.decodeFromString<Map<String, JsonObject>>(np.getString("commandList"))
+                for ((s, value) in obj) {
                     try {
-                        commandItems.add(
-                            CommandEntry(o)
-                        )
-                    } catch (e: JSONException) {
+                        val info = json.decodeFromJsonElement<CommandInfo>(JsonObject(value + ("key" to JsonPrimitive(s))))
+                        commandList.add(info)
+                        commandItems.add(CommandEntry(info))
+                    } catch (e: SerializationException) {
                         Log.e("RunCommand", "Error parsing JSON", e)
                     }
                 }
@@ -113,20 +117,15 @@ class RunCommandPlugin : Plugin() {
 
                 // Used only by RunCommandControlsProviderService to display controls correctly even when device is not available
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    val array = JSONArray()
-
-                    for (command in commandList) {
-                        array.put(command)
-                    }
-
-                    sharedPreferences.edit {
-                        putString(KEY_COMMANDS_PREFERENCE + device.deviceId, array.toString())
+                    val commandsJson = json.encodeToString(commandList)
+                    preferences.edit {
+                        putString(KEY_COMMANDS_PREFERENCE + device.deviceId, commandsJson)
                     }
                 }
 
                 forceRefreshWidgets(context)
 
-            } catch (e: JSONException) {
+            } catch (e: SerializationException) {
                 Log.e("RunCommand", "Error parsing JSON", e)
             }
 

@@ -27,8 +27,7 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.preference.PreferenceDialogFragmentCompat
-import org.json.JSONException
-import org.json.JSONObject
+import kotlinx.serialization.SerializationException
 import org.kde.kdeconnect.helpers.StorageHelper
 import org.kde.kdeconnect_tp.R
 import org.kde.kdeconnect_tp.databinding.FragmentStoragePreferenceDialogBinding
@@ -63,9 +62,8 @@ class StoragePreferenceDialogFragment : PreferenceDialogFragmentCompat(), TextWa
             enablePositiveButton = savedInstanceState.getBoolean(KEY_POSITIVE_BUTTON_ENABLED)
             takeFlags = savedInstanceState.getInt(KEY_TAKE_FLAGS, 0)
             try {
-                val jsonObject = JSONObject(savedInstanceState.getString(KEY_STORAGE_INFO, "{}"))
-                storageInfo = SftpPlugin.StorageInfo.fromJSON(jsonObject)
-            } catch (_: JSONException) {
+                storageInfo = SftpPlugin.StorageInfo.unserialize(savedInstanceState.getString(KEY_STORAGE_INFO, "{}"))
+            } catch (_: SerializationException) {
             }
         }
 
@@ -185,7 +183,6 @@ class StoragePreferenceDialogFragment : PreferenceDialogFragmentCompat(), TextWa
             binding!!.storageLocation.error = null
             binding!!.storageLocation.isEnabled = false
 
-            // TODO: Show name as used in android's picker app but I don't think it's possible to get that, everything I tried throws PermissionDeniedException
             binding!!.storageDisplayName.setText(displayName)
             binding!!.storageDisplayName.isEnabled = true
         } else {
@@ -201,10 +198,7 @@ class StoragePreferenceDialogFragment : PreferenceDialogFragmentCompat(), TextWa
         outState.putInt(KEY_TAKE_FLAGS, takeFlags)
 
         if (storageInfo != null) {
-            try {
-                outState.putString(KEY_STORAGE_INFO, storageInfo!!.toJSON().toString())
-            } catch (_: JSONException) {
-            }
+            outState.putString(KEY_STORAGE_INFO, storageInfo!!.serialize())
         }
     }
 
@@ -255,7 +249,6 @@ class StoragePreferenceDialogFragment : PreferenceDialogFragmentCompat(), TextWa
     }
 
     private class FileSeparatorCharFilter : InputFilter {
-        // TODO: Add more chars to refuse?
         // https://www.cyberciti.biz/faq/linuxunix-rules-for-naming-file-and-directory-names/
         var notAllowed: String = "/\\><|:&?*"
 

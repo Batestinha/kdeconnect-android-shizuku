@@ -12,14 +12,16 @@ import android.os.Bundle
 import android.service.chooser.ChooserTarget
 import android.service.chooser.ChooserTargetService
 import android.util.Log
-import org.kde.kdeconnect.KdeConnect.Companion.getInstance
+import org.kde.kdeconnect.KdeConnect
+import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect_tp.R
 
 class ShareChooserTargetService : ChooserTargetService() {
     override fun onGetChooserTargets(targetActivityName: ComponentName?, matchedFilter: IntentFilter?): MutableList<ChooserTarget> {
         Log.d("DirectShare", "invoked")
-        return getInstance().devices.values
-            .filter { d -> d.isReachable && d.isPaired }
+        val sharePluginKey = Plugin.getPluginKey(SharePlugin::class.java)
+        return KdeConnect.getInstance().devices.values
+            .filter { d -> d.isReachable && d.isPaired && d.isPluginEnabled(sharePluginKey) }
             .onEach { d -> Log.d("DirectShare", d.name) }
             .map { d ->
                 val targetName = d.name

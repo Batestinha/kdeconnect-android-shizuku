@@ -6,7 +6,7 @@
 package org.kde.kdeconnect.plugins.systemvolume
 
 import android.util.Log
-import org.json.JSONException
+import kotlinx.serialization.SerializationException
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
@@ -28,26 +28,23 @@ class SystemVolumePlugin : Plugin() {
     override val description: String
         get() = context.resources.getString(R.string.pref_plugin_systemvolume_desc)
 
+    override val keepAliveWhenUnreachable: Boolean = true
+
     override fun onPacketReceived(np: NetworkPacket): Boolean {
         if ("sinkList" in np) {
             sinkMap.clear()
 
-            try {
-                val sinkArray = checkNotNull(np.getJSONArray("sinkList"))
-                for (i in 0..< sinkArray.length()) {
-                    val sinkObj = sinkArray.getJSONObject(i)
+            val sinkArray = np.getJsonArray("sinkList")
+            for (sinkObj in sinkArray.orEmpty()) {
+                try {
                     val sink = Sink(sinkObj)
                     sinkMap[sink.name] = sink
+                } catch (e: SerializationException) {
+                    Log.e("KDEConnect", "Skipping invalid sink", e)
                 }
-            } catch (e: JSONException) {
-                Log.e("KDEConnect", "Exception", e)
             }
 
-            synchronized(listeners) {
-                for (l in listeners) {
-                    l.sinksChanged()
-                }
-            }
+            notifySinksChanged()
         } else {
             val name = np.getString("name")
             val sink = sinkMap[name]
@@ -64,6 +61,14 @@ class SystemVolumePlugin : Plugin() {
             }
         }
         return true
+    }
+
+    private fun notifySinksChanged() {
+        synchronized(listeners) {
+            for (l in listeners) {
+                l.sinksChanged()
+            }
+        }
     }
 
     internal fun sendVolume(name: String, volume: Int) {
@@ -84,6 +89,12 @@ class SystemVolumePlugin : Plugin() {
         val np = NetworkPacket(PACKET_TYPE_SYSTEMVOLUME_REQUEST)
         np["enabled"] = true
         np["name"] = name
+        device.sendPacket(np)
+    }
+
+    internal fun requestSinkList() {
+        val np = NetworkPacket(PACKET_TYPE_SYSTEMVOLUME_REQUEST)
+        np["requestSinks"] = true
         device.sendPacket(np)
     }
 

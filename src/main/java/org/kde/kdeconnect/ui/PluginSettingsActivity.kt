@@ -7,15 +7,9 @@ package org.kde.kdeconnect.ui
 
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
-import android.view.Menu
 import android.view.MenuItem
-import android.view.View
-import android.widget.TextView
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import org.kde.kdeconnect.DeviceStats
-import org.kde.kdeconnect.KdeConnect.Companion.getInstance
+import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.base.BaseActivity
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.ui.PluginPreference.PluginPreferenceCallback
@@ -32,7 +26,9 @@ class PluginSettingsActivity : BaseActivity<ActivityPluginSettingsBinding>(), Pl
         settingsDeviceId = intent.getStringExtra(EXTRA_DEVICE_ID)
             ?: throw RuntimeException("You must start DeviceSettingActivity using an intent that has a $EXTRA_DEVICE_ID extra")
 
-        super.onCreate(savedInstanceState)
+        // Don't restore a specific plugin settings fragment if the device is no longer connected
+        val deviceReachable = KdeConnect.getInstance().getDevice(settingsDeviceId)?.isReachable == true
+        super.onCreate(if (deviceReachable) savedInstanceState else null)
 
         setSupportActionBar(binding.toolbarLayout.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -42,7 +38,7 @@ class PluginSettingsActivity : BaseActivity<ActivityPluginSettingsBinding>(), Pl
         if (fragment == null) {
             val pluginKey = intent.getStringExtra(EXTRA_PLUGIN_KEY)
             if (pluginKey != null) {
-                fragment = getInstance().getDevice(settingsDeviceId)
+                fragment = KdeConnect.getInstance().getDevice(settingsDeviceId)
                     ?.getPluginIncludingWithoutPermissions(pluginKey)
                     ?.getSettingsFragment(this)
             }
@@ -70,37 +66,10 @@ class PluginSettingsActivity : BaseActivity<ActivityPluginSettingsBinding>(), Pl
         return super.onOptionsItemSelected(item)
     }
 
-    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
-        super.onPrepareOptionsMenu(menu)
-        menu.clear()
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N) {
-            return false // PacketStats not working in API < 24
-        }
-        menu.add(R.string.plugin_stats)
-            .setOnMenuItemClickListener {
-                val stats = DeviceStats.getStatsForDevice(settingsDeviceId)
-                val alertDialog = MaterialAlertDialogBuilder(this@PluginSettingsActivity)
-                    .setTitle(R.string.plugin_stats)
-                    .setPositiveButton(R.string.ok) { dialog, _ ->
-                        dialog.dismiss()
-                    }
-                    .setMessage(stats)
-                    .show()
-                val messageView = alertDialog.findViewById<View?>(android.R.id.message)
-                if (messageView is TextView) {
-                    messageView.setTextIsSelectable(true)
-                }
-                true
-            }
-        return true
-    }
-
     override fun onStartPluginSettingsFragment(plugin: Plugin) {
         setTitle(getString(R.string.plugin_settings_with_name, plugin.displayName))
 
-        // TODO: getSettingsFragment return is nullable because NotificationFilterActivity isn't a PluginSettingsFragment yet
         val fragment = plugin.getSettingsFragment(this)
-            ?: return
 
         supportFragmentManager
             .beginTransaction()

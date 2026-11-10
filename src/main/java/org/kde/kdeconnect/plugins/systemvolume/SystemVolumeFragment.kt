@@ -55,7 +55,7 @@ class SystemVolumeFragment : BaseFragment<SystemVolumeFragmentBinding>(),
     }
 
     override fun onDestroyView() {
-        disconnectFromPlugin(deviceId)
+        disconnectFromPlugin()
         super.onDestroyView()
     }
 
@@ -76,11 +76,13 @@ class SystemVolumeFragment : BaseFragment<SystemVolumeFragmentBinding>(),
         this.plugin = plugin
         plugin.addSinkListener(this@SystemVolumeFragment)
         sinksChanged()
+        plugin.requestSinkList()
     }
 
-    private fun disconnectFromPlugin(deviceId: String) {
-        KdeConnect.getInstance().getDevicePlugin<SystemVolumePlugin>(deviceId)
-            ?.removeSinkListener(this@SystemVolumeFragment)
+    private fun disconnectFromPlugin() {
+        if (::plugin.isInitialized) {
+            plugin.removeSinkListener(this@SystemVolumeFragment)
+        }
     }
 
     override fun sinksChanged() {
@@ -91,8 +93,7 @@ class SystemVolumeFragment : BaseFragment<SystemVolumeFragmentBinding>(),
             sink.addListener(this@SystemVolumeFragment)
         }
         requireActivity().runOnUiThread {
-            val newSinks: List<Sink> = ArrayList(plugin.sinks)
-            recyclerAdapter.submitList(newSinks)
+            recyclerAdapter.submitList(plugin.sinks.toList())
         }
     }
 
@@ -122,7 +123,7 @@ class SystemVolumeFragment : BaseFragment<SystemVolumeFragmentBinding>(),
         plugin.sendVolume(defaultSink.name, newVolume)
     }
 
-    private inner class RecyclerSinkAdapter : ListAdapter<Sink?, SinkItemHolder>(SinkItemCallback()) {
+    private inner class RecyclerSinkAdapter : ListAdapter<Sink, SinkItemHolder>(SinkItemCallback()) {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SinkItemHolder {
             val viewBinding = ListItemSystemvolumeBinding.inflate(layoutInflater, parent, false)
@@ -131,7 +132,7 @@ class SystemVolumeFragment : BaseFragment<SystemVolumeFragmentBinding>(),
 
         override fun onBindViewHolder(holder: SinkItemHolder, position: Int) {
             val sink = getItem(position)
-            sink?.let { holder.bind(it) }
+            holder.bind(sink)
         }
     }
 

@@ -268,7 +268,6 @@
   <string name="share_destination_folder_preference">مجلد الوجهة</string>
   <string name="share">شارك</string>
   <string name="share_received_file">شارك \"%s\"</string>
-  <string name="title_activity_notification_filter">مرشّح الإشعارات</string>
   <string name="filter_apps_info">ستُزامن الإشعارات من التّطبيقات المحدّدة.</string>
   <string name="show_notification_if_screen_off">أرسل إشعارات فقط إذا كانت الشاشة مغلقة</string>
   <string name="add_device_dialog_title">أضف جهازًا</string>
@@ -338,7 +337,6 @@
   <string name="contacts_per_device_confirmation">ستُنسخ جهات اتصال هاتفك إلى هذا الجهاز، بحيث يمكن استخدامها من قبل تطبيق جسر كِيدِي للرسائل النصية القصيرة والتطبيقات الأخرى.</string>
   <string name="select_ringtone">اختر النغمة</string>
   <string name="telephony_pref_blocked_title">أرقام محظورة</string>
-  <string name="telephony_pref_blocked_dialog_desc">لا تعرض المكالمات والرسائل النصية القصيرة من هذه الأرقام. يرجى تحديد رقم واحد لكل سطر</string>
   <string name="mpris_coverart_description">الصورة الفنية للوسيط الحالي</string>
   <string name="settings_icon_description">أيقونة الإعدادات</string>
   <string name="presenter_fullscreen">ملء الشّاشة</string>

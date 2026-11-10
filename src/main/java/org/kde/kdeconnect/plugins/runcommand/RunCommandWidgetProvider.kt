@@ -52,13 +52,15 @@ class RunCommandWidgetProvider : AppWidgetProvider() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d("WidgetProvider", "onReceive " + intent.action)
+        Log.d("WidgetProvider", "onReceive ${intent.action}")
 
         if (intent.action == RUN_COMMAND_ACTION) {
             val targetCommand = intent.getStringExtra(TARGET_COMMAND)
             val targetDevice = intent.getStringExtra(TARGET_DEVICE)
-            val plugin = KdeConnect.getInstance().getDevicePlugin<RunCommandPlugin>(targetDevice)
-            if (plugin != null) {
+            val device = KdeConnect.getInstance().getDevice(targetDevice)
+            val plugin = device?.getPlugin<RunCommandPlugin>()
+            // The plugin is kept while the device is unreachable, but we can't run commands then
+            if (plugin != null && device?.isReachable == true) {
                 try {
                     plugin.runCommand(targetCommand)
                 } catch (ex: Exception) {
@@ -114,7 +116,7 @@ internal fun updateAppWidget(
     val views = RemoteViews(BuildConfig.APPLICATION_ID, R.layout.widget_remotecommandplugin)
     assignTitleIntent(context, appWidgetId, views)
 
-    Log.d("WidgetProvider", "updateAppWidget device: " + (device?.name ?: "null"))
+    Log.d("WidgetProvider", "updateAppWidget device: ${device?.name}")
 
     // Android should automatically toggle between the command list and the error text
     views.setEmptyView(R.id.widget_command_list, R.id.widget_error_text)

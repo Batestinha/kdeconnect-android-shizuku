@@ -9,7 +9,6 @@ package org.kde.kdeconnect.plugins.sftp
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.graphics.PorterDuff
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -18,19 +17,20 @@ import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.view.ActionMode
 import androidx.core.content.edit
+import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.util.set
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceScreen
 import androidx.recyclerview.widget.RecyclerView
-import org.json.JSONArray
-import org.json.JSONException
-import org.json.JSONObject
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import org.kde.kdeconnect.helpers.JsonHelper.json
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.ui.PluginSettingsActivity
 import org.kde.kdeconnect.ui.PluginSettingsFragment
 import org.kde.kdeconnect_tp.R
-import java.util.Collections
 
 class SftpSettingsFragment :
     PluginSettingsFragment(),
@@ -42,7 +42,13 @@ class SftpSettingsFragment :
     private lateinit var storageInfoList: MutableList<SftpPlugin.StorageInfo>
     private var preferenceCategory: PreferenceCategory? = null
     private var actionMode: ActionMode? = null
-    private var savedActionModeState: JSONObject? = null
+    private var savedActionModeState: ActionModeState? = null
+
+    @Serializable
+    private class ActionModeState(
+        @SerialName("ActionModeEnabled") val enabled: Boolean,
+        @SerialName("ActionModeSelectedItems") val selectedItems: List<Int> = emptyList(),
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // super.onCreate creates PreferenceManager and calls onCreatePreferences()
@@ -59,23 +65,15 @@ class SftpSettingsFragment :
 
         if (savedInstanceState != null && savedInstanceState.containsKey(KEY_ACTION_MODE_STATE)) {
             try {
-                savedActionModeState = JSONObject(savedInstanceState.getString(KEY_ACTION_MODE_STATE, "{}"))
-            } catch (_: JSONException) {}
+                savedActionModeState = json.decodeFromString<ActionModeState>(savedInstanceState.getString(KEY_ACTION_MODE_STATE, "{}"))
+            } catch (_: SerializationException) {}
         }
     }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         super.onCreatePreferences(savedInstanceState, rootKey)
 
-        // The activity is finishing because its device is no longer available.
-        val currentPlugin = plugin ?: return
-
-        // Can't use try-with-resources since TypedArray's close method was only added in API 31
-        val ta = requireContext().obtainStyledAttributes(intArrayOf(androidx.appcompat.R.attr.colorAccent))
-        val colorAccent = ta.getColor(0, 0)
-        ta.recycle()
-
-        storageInfoList = getStorageInfoList(requireContext(), currentPlugin)
+        storageInfoList = getStorageInfoList(requireContext(), plugin)
 
         val preferenceScreen = preferenceScreen
         val category: PreferenceCategory? = preferenceScreen.findPreference(getString(R.string.sftp_preference_key_preference_category))
@@ -86,7 +84,13 @@ class SftpSettingsFragment :
         }
 
         val addStoragePreference: Preference? = preferenceScreen.findPreference(getString(R.string.sftp_preference_key_add_storage))
-        addStoragePreference?.icon?.setColorFilter(colorAccent, PorterDuff.Mode.SRC_IN)
+        addStoragePreference?.icon?.let { icon ->
+            // Can't use try-with-resources since TypedArray's close method was only added in API 31
+            val ta = requireContext().obtainStyledAttributes(intArrayOf(androidx.appcompat.R.attr.colorAccent))
+            val colorAccent = ta.getColor(0, 0)
+            ta.recycle()
+            DrawableCompat.setTint(icon, colorAccent)
+        }
     }
 
     private fun addStoragePreferences(preferenceCategory: PreferenceCategory) {
@@ -122,29 +126,26 @@ class SftpSettingsFragment :
     }
 
     private fun restoreActionMode() {
-        try {
-            val state = savedActionModeState ?: return
-            if (state.getBoolean(KEY_ACTION_MODE_ENABLED)) {
-                actionMode = (requireActivity() as PluginSettingsActivity).startSupportActionMode(this)
+        val state = savedActionModeState ?: return
+        if (state.enabled) {
+            actionMode = (requireActivity() as PluginSettingsActivity).startSupportActionMode(this)
 
-                val currentActionMode = actionMode
-                val category = preferenceCategory
-                if (currentActionMode != null && category != null) {
-                    val jsonArray = state.getJSONArray(KEY_ACTION_MODE_SELECTED_ITEMS)
-                    val selectedItems = SparseBooleanArray()
+            val currentActionMode = actionMode
+            val category = preferenceCategory
+            if (currentActionMode != null && category != null) {
+                val selectedItems = SparseBooleanArray()
 
-                    for (i in 0 until jsonArray.length()) {
-                        selectedItems[jsonArray.getInt(i)] = true
-                    }
+                for (i in state.selectedItems) {
+                    selectedItems[i] = true
+                }
 
-                    for (i in 0 until category.preferenceCount) {
-                        val preference = category.getPreference(i) as StoragePreference
-                        preference.inSelectionMode = true
-                        preference.checkbox.isChecked = selectedItems.get(i, false)
-                    }
+                for (i in 0 until category.preferenceCount) {
+                    val preference = category.getPreference(i) as StoragePreference
+                    preference.inSelectionMode = true
+                    preference.checkbox.isChecked = selectedItems.get(i, false)
                 }
             }
-        } catch (_: JSONException) {}
+        }
     }
 
     override fun onDisplayPreferenceDialog(preference: Preference) {
@@ -163,48 +164,34 @@ class SftpSettingsFragment :
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
 
-        try {
-            val jsonObject = JSONObject()
+        val selectedItems = ArrayList<Int>()
 
-            jsonObject.put(KEY_ACTION_MODE_ENABLED, actionMode != null)
-
-            val category = preferenceCategory
-            if (actionMode != null && category != null) {
-                val jsonArray = JSONArray()
-
-                for (i in 0 until category.preferenceCount) {
-                    val preference = category.getPreference(i) as StoragePreference
-                    if (preference.checkbox.isChecked) {
-                        jsonArray.put(i)
-                    }
+        val category = preferenceCategory
+        if (actionMode != null && category != null) {
+            for (i in 0 until category.preferenceCount) {
+                val preference = category.getPreference(i) as StoragePreference
+                if (preference.checkbox.isChecked) {
+                    selectedItems.add(i)
                 }
-
-                jsonObject.put(KEY_ACTION_MODE_SELECTED_ITEMS, jsonArray)
             }
+        }
 
-            outState.putString(KEY_ACTION_MODE_STATE, jsonObject.toString())
-        } catch (_: JSONException) {}
+        val state = ActionModeState(actionMode != null, selectedItems)
+        outState.putString(KEY_ACTION_MODE_STATE, json.encodeToString(state))
     }
 
     private fun saveStorageInfoList() {
-        val currentPlugin = this.plugin ?: return
-        val preferences: SharedPreferences = currentPlugin.preferences
-
-        val jsonArray = JSONArray()
-
-        try {
-            for (storageInfo in this.storageInfoList) {
-                jsonArray.put(storageInfo.toJSON())
-            }
-        } catch (_: JSONException) {}
+        val preferences: SharedPreferences = plugin.preferences
 
         preferences.edit {
-            putString(requireContext().getString(SftpPlugin.PREFERENCE_KEY_STORAGE_INFO_LIST), jsonArray.toString())
+            putString(requireContext().getString(SftpPlugin.PREFERENCE_KEY_STORAGE_INFO_LIST), SftpPlugin.StorageInfo.serializeList(storageInfoList))
         }
     }
 
     private fun sortStorageInfoListOnDisplayName() {
-        Collections.sort(storageInfoList) { si1, si2 -> si1.displayName.compareTo(si2.displayName, ignoreCase = true) }
+        storageInfoList.sortWith { si1, si2 ->
+            si1.displayName.compareTo(si2.displayName, ignoreCase = true)
+        }
     }
 
     override fun isDisplayNameAllowed(displayName: String): StoragePreferenceDialogFragment.CallbackResult {
@@ -355,8 +342,6 @@ class SftpSettingsFragment :
     companion object {
         private const val KEY_STORAGE_PREFERENCE_DIALOG = "StoragePreferenceDialog"
         private const val KEY_ACTION_MODE_STATE = "ActionModeState"
-        private const val KEY_ACTION_MODE_ENABLED = "ActionModeEnabled"
-        private const val KEY_ACTION_MODE_SELECTED_ITEMS = "ActionModeSelectedItems"
 
         fun newInstance(pluginKey: String, deviceId: String, layout: Int): SftpSettingsFragment {
             return SftpSettingsFragment().apply {
@@ -365,38 +350,15 @@ class SftpSettingsFragment :
         }
 
         fun getStorageInfoList(context: Context, plugin: Plugin): MutableList<SftpPlugin.StorageInfo> {
-            val storageInfoList = ArrayList<SftpPlugin.StorageInfo>()
             val deviceSettings = plugin.preferences
-            val jsonString = deviceSettings.getString(context.getString(SftpPlugin.PREFERENCE_KEY_STORAGE_INFO_LIST), "[]")
+            val jsonString = deviceSettings.getString(context.getString(SftpPlugin.PREFERENCE_KEY_STORAGE_INFO_LIST), null) ?: "[]"
 
-            try {
-                val jsonArray = JSONArray(jsonString)
-                for (i in 0 until jsonArray.length()) {
-                    storageInfoList.add(SftpPlugin.StorageInfo.fromJSON(jsonArray.getJSONObject(i)))
-                }
-            } catch (e: JSONException) {
+            return try {
+                SftpPlugin.StorageInfo.unserializeList(jsonString).toMutableList()
+            } catch (e: SerializationException) {
                 Log.e("SFTPSettings", "Couldn't load storage info", e)
+                ArrayList()
             }
-
-            return storageInfoList
-        }
-
-        fun isDisplayNameUnique(storageInfoList: List<SftpPlugin.StorageInfo>, displayName: String, displayNameReadOnly: String): Boolean {
-            for (info in storageInfoList) {
-                if (info.displayName == displayName || info.displayName == displayName + displayNameReadOnly) {
-                    return false
-                }
-            }
-            return true
-        }
-
-        fun isAlreadyConfigured(storageInfoList: List<SftpPlugin.StorageInfo>, sdCardUri: Uri): Boolean {
-            for (info in storageInfoList) {
-                if (info.uri == sdCardUri) {
-                    return true
-                }
-            }
-            return false
         }
     }
 }

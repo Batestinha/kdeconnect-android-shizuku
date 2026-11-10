@@ -20,7 +20,6 @@ import org.kde.kdeconnect.helpers.ThreadHelper
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect.plugins.notifications.NotificationReceiver
-import org.kde.kdeconnect.ui.MainActivity
 import org.kde.kdeconnect.ui.StartActivityAlertDialogFragment
 import org.kde.kdeconnect_tp.R
 import java.util.concurrent.ConcurrentHashMap
@@ -80,7 +79,7 @@ class MprisReceiverPlugin : Plugin() {
         val artUrl = np.getString("albumArtUrl", "")
         if (!artUrl.isEmpty()) {
             // run it on a different thread to avoid blocking
-            ThreadHelper.execute { sendAlbumArt(player, artUrl) }
+            ThreadHelper.runOnNewThread { sendAlbumArt(player, artUrl) }
             return true
         }
 
@@ -209,8 +208,7 @@ class MprisReceiverPlugin : Plugin() {
             .setPositiveButton(R.string.open_settings)
             .setNegativeButton(R.string.cancel)
             .setIntentAction("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")
-            .setStartForResult(true)
-            .setRequestCode(MainActivity.RESULT_NEEDS_RELOAD)
+            .setReloadPluginsOnResult(true)
             .create()
 
     companion object {

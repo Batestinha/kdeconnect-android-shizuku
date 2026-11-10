@@ -6,12 +6,12 @@
 package org.kde.kdeconnect.plugins.connectivityreport
 
 import android.Manifest
-import org.json.JSONException
-import org.json.JSONObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
-import org.kde.kdeconnect.plugins.connectivityreport.ConnectivityListener.Companion.getInstance
 import org.kde.kdeconnect.plugins.connectivityreport.ConnectivityListener.SubscriptionState
 import org.kde.kdeconnect_tp.R
 
@@ -52,15 +52,12 @@ class ConnectivityReportPlugin : Plugin() {
             if (states.isEmpty()) {
                 return
             }
-            val signalStrengths = JSONObject()
-            states.forEach { (subID: Int, subscriptionState: SubscriptionState) ->
-                try {
-                    val subInfo = JSONObject()
-                    subInfo.put("networkType", subscriptionState.networkType)
-                    subInfo.put("signalStrength", subscriptionState.signalStrength)
-                    signalStrengths.put(subID.toString(), subInfo)
-                } catch (e: JSONException) {
-                    e.printStackTrace()
+            val signalStrengths = buildJsonObject {
+                states.forEach { (subID: Int, subscriptionState: SubscriptionState) ->
+                    putJsonObject(subID.toString()) {
+                        put("networkType", subscriptionState.networkType)
+                        put("signalStrength", subscriptionState.signalStrength)
+                    }
                 }
             }
             connectivityInfo["signalStrengths"] = signalStrengths
@@ -68,25 +65,37 @@ class ConnectivityReportPlugin : Plugin() {
         }
     }
 
+    /**
+     * The latest connectivity information received from the linked device. Will be empty or null
+     * if the linked device has not sent us any information yet.
+     */
+    var remoteConnectivityInfo: Map<String, DeviceConnectivityInfo> = emptyMap()
+        private set
+
     override fun onCreate() {
-        getInstance(context).listenStateChanges(listener)
+        ConnectivityListener.getInstance(context).listenStateChanges(listener)
     }
 
     override fun onDestroy() {
-        getInstance(context).cancelActiveListener(listener)
+        ConnectivityListener.getInstance(context).cancelActiveListener(listener)
     }
 
     override fun onPacketReceived(np: NetworkPacket): Boolean {
-        return false
+        if (PACKET_TYPE_CONNECTIVITY_REPORT != np.type) {
+            return false
+        }
+        remoteConnectivityInfo = DeviceConnectivityInfo.fromPacket(np)
+        device.onPluginsChanged()
+        return true
     }
 
-    override val supportedPacketTypes: Array<String> = emptyArray()
+    override val supportedPacketTypes: Array<String> = arrayOf(PACKET_TYPE_CONNECTIVITY_REPORT)
 
     override val outgoingPacketTypes: Array<String> = arrayOf(PACKET_TYPE_CONNECTIVITY_REPORT)
 
     override val requiredPermissions: Array<String> = arrayOf(Manifest.permission.READ_PHONE_STATE)
 
     companion object {
-        private const val PACKET_TYPE_CONNECTIVITY_REPORT = "kdeconnect.connectivity_report"
+        const val PACKET_TYPE_CONNECTIVITY_REPORT = "kdeconnect.connectivity_report"
     }
 }

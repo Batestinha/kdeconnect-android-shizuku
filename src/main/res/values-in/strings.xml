@@ -186,7 +186,6 @@
   <string name="share_destination_folder_preference">Direktori tujuan</string>
   <string name="share">Bagikan</string>
   <string name="share_received_file">Bagikan \"%s\"</string>
-  <string name="title_activity_notification_filter">Filter notifikasi</string>
   <string name="filter_apps_info">Notifikasi akan disinkronkan terhadap apl terpilih.</string>
   <string name="show_notification_if_screen_off">Hanya kirimkan notifikasi saja ketika layarnya mati</string>
   <string name="add_device_dialog_title">Tambahkan peranti</string>
@@ -241,7 +240,6 @@
   <string name="contacts_permission_explanation">Untuk membagikan buku kontak dengan desktop, Anda harus memberikan perizinan kontak</string>
   <string name="select_ringtone">Pilih sebuah ringtone</string>
   <string name="telephony_pref_blocked_title">Nomor yang diblokir</string>
-  <string name="telephony_pref_blocked_dialog_desc">Jangan tampilkan panggilan dan SMS dari nomor tersebut. Silakan tentukan satu nomor tiap baris</string>
   <string name="mpris_coverart_description">Seni sampul media saat ini</string>
   <string name="settings_icon_description">Ikon pengaturan</string>
   <string name="presenter_fullscreen">Layar penuh</string>

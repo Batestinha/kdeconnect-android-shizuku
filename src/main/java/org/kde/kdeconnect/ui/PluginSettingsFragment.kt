@@ -9,7 +9,7 @@ import android.content.Context
 import android.os.Bundle
 import androidx.preference.PreferenceFragmentCompat
 import org.kde.kdeconnect.Device
-import org.kde.kdeconnect.KdeConnect.Companion.getInstance
+import org.kde.kdeconnect.KdeConnect
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory
 import org.kde.kdeconnect_tp.R
@@ -20,7 +20,7 @@ open class PluginSettingsFragment : PreferenceFragmentCompat() {
 
     protected lateinit var device: Device
 
-    protected var plugin: Plugin? = null
+    protected lateinit var plugin: Plugin
 
     protected fun setArguments(pluginKey: String, deviceId: String, vararg settingsLayouts: Int): Bundle {
         val args = Bundle()
@@ -39,21 +39,17 @@ open class PluginSettingsFragment : PreferenceFragmentCompat() {
         this.pluginKey = arguments.getString(ARG_PLUGIN_KEY)!!
         this.layouts = arguments.getIntArray(ARG_LAYOUT)!!
         val deviceId = requireArguments().getString(ARG_DEVICE_ID)!!
-        val device = getInstance().getDevice(deviceId)
-        if (device == null) {
-            requireActivity().finish()
-        } else {
-            this.device = device
-            this.plugin = device.getPluginIncludingWithoutPermissions(pluginKey)
-        }
+        // PluginSettingsActivity only creates or restores this fragment when the device and plugin are available
+        this.device = KdeConnect.getInstance().getDevice(deviceId)!!
+        this.plugin = device.getPluginIncludingWithoutPermissions(pluginKey)!!
         super.onCreate(savedInstanceState)
     }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        val plugin = plugin
-        if (plugin != null && plugin.supportsDeviceSpecificSettings()) {
+        // A null name means the app-wide default SharedPreferences, which PreferenceManager uses already
+        plugin.sharedPreferencesName?.let { name ->
             val prefsManager = preferenceManager
-            prefsManager.setSharedPreferencesName(plugin.sharedPreferencesName)
+            prefsManager.setSharedPreferencesName(name)
             prefsManager.setSharedPreferencesMode(Context.MODE_PRIVATE)
         }
 

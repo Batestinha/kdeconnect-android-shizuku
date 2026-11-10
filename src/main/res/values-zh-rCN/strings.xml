@@ -64,6 +64,7 @@
   <string name="open_mousepad">远程输入</string>
   <string name="open_mousepad_tv">电视遥控器</string>
   <string name="mousepad_info">在屏幕上移动手指来移动光标。轻击代表左键，双指或三指点击代表右键或中键。用双指滚动。用长按来拖放。基于陀螺仪的空中鼠标功能可以在插件的首选项中启用。</string>
+  <string name="mousepad_info_double_tap">在屏幕上移动手指来移动光标。轻击代表左键，双指或三指点击代表右键或中键。双指滚动，双击拖放。基于陀螺仪的空中鼠标功能可以在插件的首选项中启用。</string>
   <string name="mousepad_info_no_gestures">在屏幕上移动手指来移动鼠标光标，手指轻点来进行鼠标键点击。</string>
   <string name="mousepad_keyboard_input_not_supported">配对的设备不支持键盘输入</string>
   <string name="mousepad_single_tap_settings_title">设置单指点击操作</string>
@@ -228,7 +229,6 @@
   <string name="share_destination_folder_preference">目标目录</string>
   <string name="share">分享</string>
   <string name="share_received_file">分享 \"%s\"</string>
-  <string name="title_activity_notification_filter">通知过滤器</string>
   <string name="filter_apps_info">所选软件的通知将会被同步。</string>
   <string name="show_notification_if_screen_off">仅在屏幕关闭时发送通知</string>
   <string name="add_device_dialog_title">添加设备</string>
@@ -247,6 +247,7 @@
   <string name="sftp_saf_permission_explanation">要远程访问文件，您需要配置存储位置</string>
   <string name="sftp_manage_storage_permission_explanation">要允许远程访问此设备上的文件，您必须允许 KDE Connect 管理它的存储。</string>
   <string name="sftp_missing_permission_error">缺少权限：文件系统访问</string>
+  <string name="sftp_could_not_determine_ip">无法确定本地 IP 地址</string>
   <string name="no_players_connected">未找到播放器</string>
   <string name="send_files">发送文件</string>
   <string name="use_digitizer">用作数位板</string>
@@ -298,7 +299,7 @@
   <string name="contacts_per_device_confirmation">您的手机联系人将被复制到此设备，以便让 KDE Connect 短信应用和其他应用使用。</string>
   <string name="select_ringtone">选择铃声</string>
   <string name="telephony_pref_blocked_title">已屏蔽的号码</string>
-  <string name="telephony_pref_blocked_dialog_desc">不要显示来自这些号码的电话和短信。一行一个号码</string>
+  <string name="telephony_pref_blocked_dialog_desc">不要显示来自这些号码的电话。一行一个号码</string>
   <string name="mpris_coverart_description">当前媒体的封面艺术</string>
   <string name="settings_icon_description">设置图标</string>
   <string name="presenter_fullscreen">全屏</string>
@@ -325,6 +326,7 @@
   <string name="runcommand_notpaired">设备未配对</string>
   <string name="runcommand_nosuchdevice">没有此设备</string>
   <string name="runcommand_noruncommandplugin">此设备没有启用“运行命令插件”</string>
+  <string name="runcommand_widget_no_device">点击标题来选择设备。</string>
   <string name="runcommand_category_device_controls_title">设备控制</string>
   <string name="runcommand_device_controls_summary">如果您的设备支持设备控制功能，您配置的命令将显示在该设备上。</string>
   <string name="set_runcommand_name_as_title">set_runcommand_name_as_title</string>

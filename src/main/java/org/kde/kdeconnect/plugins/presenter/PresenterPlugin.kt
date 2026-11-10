@@ -29,7 +29,11 @@ class PresenterPlugin : Plugin() {
     override val description: String
         get() = context.getString(R.string.pref_plugin_presenter_desc)
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
+
+    override val keepAliveWhenUnreachable: Boolean = true
+
+    override val settingsScope = SettingsScope.APP_WIDE
 
     override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
         return PluginSettingsFragment.newInstance(pluginKey, device.deviceId, R.xml.presenterplugin_preferences)
@@ -73,7 +77,19 @@ class PresenterPlugin : Plugin() {
         device.sendPacket(np)
     }
 
+    fun sendZoomIn() = sendCtrlKey("+")
+
+    fun sendZoomOut() = sendCtrlKey("-")
+
+    private fun sendCtrlKey(key: String) {
+        val np = NetworkPacket(PACKET_TYPE_MOUSEPAD_REQUEST)
+        np["key"] = key
+        np["ctrl"] = true
+        device.sendPacket(np)
+    }
+
     fun sendPointer(xDelta: Float, yDelta: Float) {
+        if (!device.isReachable) return // Called continuously from the gyroscope, don't spam failures
         val np = NetworkPacket(PACKET_TYPE_PRESENTER)
         np["dx"] = xDelta.toDouble()
         np["dy"] = yDelta.toDouble()

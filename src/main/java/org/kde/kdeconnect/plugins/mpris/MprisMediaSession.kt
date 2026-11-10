@@ -105,9 +105,6 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
 
             NotificationReceiver.RunCommand(context) { service: NotificationReceiver ->
                 service.addListener(this@MprisMediaSession)
-                if (service.isConnected) {
-                    onListenerConnected(service)
-                }
             }
         }
 
@@ -127,6 +124,12 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
         mprisDevices.remove(device)
         plugin.removePlayerStatusUpdatedHandler("media_notification")
         plugin.removePlayerListUpdatedHandler("media_notification")
+        if (currentShowingPlayer?.device?.deviceId == device) {
+            currentShowingPlayer = null
+        }
+        if (lastShowingDeviceId == device) {
+            lastShowingDeviceId = null
+        }
         updateMediaNotification()
 
         val systemVolumeProvider = SystemVolumeProvider.getInstance()
@@ -351,11 +354,11 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
 
         // Only set the notification body text if we have an author and/or album
         if (player.artist.isNotEmpty() && player.album.isNotEmpty()) {
-            notification.setContentText(player.artist + " - " + player.album + " (" + player.playerName + ")")
+            notification.setContentText("${player.artist} - ${player.album} (${player.playerName})")
         } else if (player.artist.isNotEmpty()) {
-            notification.setContentText(player.artist + " (" + player.playerName + ")")
+            notification.setContentText("${player.artist} (${player.playerName})")
         } else if (player.album.isNotEmpty()) {
-            notification.setContentText(player.album + " (" + player.playerName + ")")
+            notification.setContentText("${player.album} (${player.playerName})")
         } else {
             notification.setContentText(player.playerName)
         }
@@ -512,7 +515,7 @@ class MprisMediaSession : OnSharedPreferenceChangeListener, NotificationReceiver
         this.packageName == SPOTIFY_PACKAGE_NAME
 
     companion object {
-        const val TAG = "MprisMediaSession"
+        private const val TAG = "MprisMediaSession"
 
         private const val MPRIS_MEDIA_NOTIFICATION_ID =
             0x91b70463.toInt() // echo MprisNotification | md5sum | head -c 8

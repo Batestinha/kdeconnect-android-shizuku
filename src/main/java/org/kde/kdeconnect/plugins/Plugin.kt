@@ -16,14 +16,20 @@ import androidx.annotation.EmptySuper
 import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.DialogFragment
+import androidx.preference.PreferenceManager
 import org.kde.kdeconnect.Device
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.ui.AlertDialogFragment
-import org.kde.kdeconnect.ui.MainActivity
 import org.kde.kdeconnect.ui.PermissionsAlertDialogFragment
 import org.kde.kdeconnect.ui.PluginSettingsFragment
 import org.kde.kdeconnect_tp.R
 
+/**
+ * Plugin instances can be created and discarded without [onCreate] or [onDestroy] ever being called (e.g. if
+ * the required permissions are missing, or just to call [onDeviceUnpaired]), so the constructor must not
+ * register listeners, start threads or acquire anything else that would need to be released. Do that in
+ * [onCreate] instead.
+ */
 abstract class Plugin {
     protected lateinit var device: Device
     protected lateinit var context: Context
@@ -39,7 +45,8 @@ abstract class Plugin {
 
         if (device != null) {
             this.device = device
-            this.preferences = context.getSharedPreferences(this.sharedPreferencesName, Context.MODE_PRIVATE)
+            this.preferences = sharedPreferencesName?.let { context.getSharedPreferences(it, Context.MODE_PRIVATE) }
+                ?: PreferenceManager.getDefaultSharedPreferences(context)
         }
     }
 
@@ -56,20 +63,25 @@ abstract class Plugin {
      */
     open fun getUiMenuEntries(): List<PluginUiMenuEntry> = listOf()
 
-    val sharedPreferencesName: String
+    /**
+     * Name of the SharedPreferences file selected by [settingsScope],
+     * or null to use the app-wide default SharedPreferences.
+     */
+    val sharedPreferencesName: String?
         get() {
-            if (isDeviceInitialized.not()) {
+            if (!isDeviceInitialized) {
                 throw RuntimeException("You have to call setContext() before you can call getSharedPreferencesName()")
             }
-            if (this.supportsDeviceSpecificSettings()) {
-                return device.deviceId + "_" + this.pluginKey + "_preferences"
+            return when (settingsScope) {
+                SettingsScope.APP_WIDE -> null
+                SettingsScope.PER_PLUGIN -> "${pluginKey}_preferences"
+                SettingsScope.PER_DEVICE -> "${device.deviceId}_${pluginKey}_preferences"
             }
-            return pluginKey + "_preferences"
         }
 
     /**
      * To receive the network packet from the unpaired device, override
-     * listensToUnpairedDevices to return true and this method.
+     * listenToUnpairedDevices to return true and this method.
      */
     @EmptySuper
     open fun onUnpairedDevicePacketReceived(np: NetworkPacket): Boolean {
@@ -80,9 +92,19 @@ abstract class Plugin {
      * Returns whether this plugin should be loaded or not, to listen to NetworkPackets
      * from the unpaired devices. By default, returns false.
      */
-    open fun listensToUnpairedDevices(): Boolean {
-        return false
-    }
+    open val listenToUnpairedDevices: Boolean = false
+
+    /**
+     * Returns whether this plugin instance should be kept while a paired device is unreachable,
+     * instead of being discarded on disconnection and re-instantiated on reconnection. This allows
+     * keeping state and the plugin instance valid across reconnections.
+     *
+     * Plugins that return true will get [onDestroy] called on disconnection and [onCreate] called
+     * again on the same instance on reconnection, so they must not assume a fresh state in
+     * [onCreate], and must keep working (eg: not crash if their methods get called) after [onDestroy].
+     * By default, returns false.
+     */
+    open val keepAliveWhenUnreachable: Boolean = false
 
     /**
      * Return the internal plugin name, that will be used as a
@@ -113,25 +135,31 @@ abstract class Plugin {
     /**
      * Return true if this plugin needs a specific UI settings.
      */
-    open fun hasSettings(): Boolean = false
+    open val hasSettings: Boolean = false
+
+    enum class SettingsScope {
+        /** Settings are stored in the app-wide default SharedPreferences, shared with other plugins */
+        @Deprecated("Use PER_PLUGIN or PER_DEVICE for new plugins")
+        APP_WIDE,
+        /** Settings are stored in a SharedPreferences file specific to this plugin */
+        PER_PLUGIN,
+        /** Settings are stored in a SharedPreferences file specific to this plugin and device */
+        PER_DEVICE,
+    }
 
     /**
-     * Called to find out if a plugin supports device-specific settings.
-     * If you return `true` your PluginSettingsFragment will use the device
-     * specific SharedPreferences to store the settings.
-     *
-     * @return true if this plugin supports device-specific settings
+     * Where this plugin's settings are stored. Both [preferences] and the
+     * PluginSettingsFragment use the SharedPreferences file this selects.
      */
-    open fun supportsDeviceSpecificSettings(): Boolean = false
+    open val settingsScope: SettingsScope = SettingsScope.PER_PLUGIN
 
     /**
-     * If hasSettings returns true, this will be called when the user
-     * wants to access this plugin's preferences. The default implementation
-     * will return a PluginSettingsFragment with content from "yourplugin"_preferences.xml
+     * If hasSettings is true, this will be called when the user wants to access this plugin's
+     * preferences.
      *
      * @return The PluginSettingsFragment used to display this plugin's settings
      */
-    open fun getSettingsFragment(activity: Activity): PluginSettingsFragment? {
+    open fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
         throw RuntimeException("Plugin doesn't reimplement getSettingsFragment: $pluginKey")
     }
 
@@ -150,10 +178,11 @@ abstract class Plugin {
         get() = Build.VERSION.SDK_INT >= minSdk
 
     /**
-     * Initialize the listeners and structures in your plugin.
+     * Initialize the listeners and structures in your plugin. Only called while the device is reachable.
      *
-     * If [isCompatible] or [checkRequiredPermissions] returns false, this
-     * will *not* be called.
+     * If [isCompatible] or [checkRequiredPermissions] returns false, this will *not* be called.
+     *
+     * If [keepAliveWhenUnreachable] returns true, this gets called again on the same Plugin object on reconnection.
      */
     @EmptySuper
     @Throws(Exception::class)
@@ -167,6 +196,27 @@ abstract class Plugin {
      */
     @EmptySuper
     open fun onDestroy() {}
+
+    private var isCreated = false
+
+    /**
+     * Calls [onCreate] unless it was already called without a matching [destroy]. Used by [Device].
+     */
+    @Throws(Exception::class)
+    internal fun create() {
+        if (isCreated) return
+        isCreated = true // Before onCreate(), so destroy() calls onDestroy() even if onCreate() throws
+        onCreate()
+    }
+
+    /**
+     * Calls [onDestroy] if [create] was called without a matching destroy. Used by [Device].
+     */
+    internal fun destroy() {
+        if (!isCreated) return
+        isCreated = false
+        onDestroy()
+    }
 
     /**
      * Called when a plugin receives a packet.
@@ -188,19 +238,17 @@ abstract class Plugin {
      */
     abstract val outgoingPacketTypes: Array<String>
 
-    protected open val requiredPermissions: Array<String>
-        /**
-         * Should return the list of permissions from Manifest.permission.* that, if not present,
-         * mean the plugin can't be loaded.
-         */
-        get() = emptyArray()
+    /**
+     * Should return the list of permissions from Manifest.permission.* that, if not present,
+     * mean the plugin can't be loaded.
+     */
+    protected open val requiredPermissions: Array<String> = emptyArray()
 
-    protected open val optionalPermissions: Array<String>
-        /**
-         * Should return the list of permissions from Manifest.permission.* that enable additional
-         * functionality in the plugin (without preventing the plugin to load).
-         */
-        get() = emptyArray()
+    /**
+     * Should return the list of permissions from Manifest.permission.* that enable additional
+     * functionality in the plugin (without preventing the plugin to load).
+     */
+    protected open val optionalPermissions: Array<String> = emptyArray()
 
     /**
      * Returns the string to display before asking for the required permissions for the plugin.
@@ -232,7 +280,7 @@ abstract class Plugin {
             .setTitle(displayName)
             .setMessage(reason)
             .setPermissions(permissions)
-            .setRequestCode(MainActivity.RESULT_NEEDS_RELOAD)
+            .setReloadPluginsOnResult(true)
             .create()
     }
 

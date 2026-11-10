@@ -134,7 +134,6 @@ class ClipboardListener {
             cm = context.getSystemService<ClipboardManager>()!!
             cm.addPrimaryClipChangedListener { this.onClipboardChanged() }
         }
-
         try {
             Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
             Log.d(TAG, "Registered Shizuku binder listener")
@@ -369,10 +368,13 @@ class ClipboardListener {
 
     fun setText(text: String?) {
         if (this::cm.isInitialized) {
+            if (text == currentContent) {
+                return
+            }
             updateTimestamp = System.currentTimeMillis()
             currentContent = text
             currentContentType = ClipboardContentType.Text
-            cm.text = text
+            cm.setPrimaryClip(ClipData.newPlainText(null, text))
         }
     }
 

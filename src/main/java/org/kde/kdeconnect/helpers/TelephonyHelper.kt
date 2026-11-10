@@ -6,17 +6,20 @@
 
 package org.kde.kdeconnect.helpers
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.Telephony
+import android.telephony.PhoneNumberUtils
 import android.telephony.SubscriptionManager
+import android.telephony.TelephonyManager
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 
 object TelephonyHelper {
 
-    const val LOGGING_TAG: String = "TelephonyHelper"
+    private const val TAG: String = "TelephonyHelper"
 
     /**
      * Try to get the phone number currently active on the phone
@@ -31,13 +34,13 @@ object TelephonyHelper {
         val subscriptionManager = ContextCompat.getSystemService(context, SubscriptionManager::class.java)
         if (subscriptionManager == null) {
             // I don't know why or when this happens...
-            Log.w(LOGGING_TAG, "Could not get SubscriptionManager")
+            Log.w(TAG, "Could not get SubscriptionManager")
             return emptyList()
         }
         val subscriptionInfos = subscriptionManager.activeSubscriptionInfoList
         if (subscriptionInfos == null) {
             // This happens when there is no SIM card inserted
-            Log.w(LOGGING_TAG, "Could not get SubscriptionInfos")
+            Log.w(TAG, "Could not get SubscriptionInfos")
             return emptyList()
         }
         return subscriptionInfos.mapNotNull { info ->
@@ -48,6 +51,13 @@ object TelephonyHelper {
                 null
             }
         }
+    }
+
+    /**
+     * Get the ISO country code of the network the phone is currently registered to
+     */
+    fun getNetworkCountryIso(context: Context): String {
+        return (context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager).networkCountryIso
     }
 
     /**
@@ -111,7 +121,7 @@ object TelephonyHelper {
                 }
             }
         } catch (e: Exception) {
-            Log.e(LOGGING_TAG, "Error encountered while trying to read APNs", e)
+            Log.e(TAG, "Error encountered while trying to read APNs", e)
         }
 
         return null
@@ -223,37 +233,53 @@ object TelephonyHelper {
         val subscriptionID: Int
     ) {
         override fun toString(): String = number
+    }
 
-        /**
-         * Do some basic fuzzy matching on two phone numbers to determine whether they match
-         *
-         * This is roughly equivalent to SmsHelper::isPhoneNumberMatch, but might produce more false negatives
-         *
-         * @param potentialMatchingPhoneNumber The phone number to compare to this phone number
-         * @return True if the phone numbers appear to be the same, false otherwise
-         */
-        fun isMatchingPhoneNumber(potentialMatchingPhoneNumber: String): Boolean {
-            val mPhoneNumber = canonicalizePhoneNumber(number)
-            val oPhoneNumber = canonicalizePhoneNumber(potentialMatchingPhoneNumber)
-
-            if (mPhoneNumber.isEmpty() || oPhoneNumber.isEmpty()) {
-                // The empty string is not a valid phone number so does not match anything
-                return false
-            }
-
-            // To decide if a phone number matches:
-            // 1. Are they similar lengths? If two numbers are very different, probably one is junk data and should be ignored
-            // 2. Is one a superset of the other? Phone number digits get more specific the further towards the end of the string,
-            //    so if one phone number ends with the other, it is probably just a more-complete version of the same thing
-            val longerNumber = if (mPhoneNumber.length >= oPhoneNumber.length) mPhoneNumber else oPhoneNumber
-            val shorterNumber = if (mPhoneNumber.length < oPhoneNumber.length) mPhoneNumber else oPhoneNumber
-
-            // If the numbers are vastly different in length, assume they are not the same
-            if (shorterNumber.length < 0.75 * longerNumber.length) {
-                return false
-            }
-
-            return longerNumber.endsWith(shorterNumber)
+    /**
+     * Do some fuzzy matching on two phone numbers to determine whether they match
+     *
+     * Uses the matcher provided by Android when available (API 31+), otherwise falls back to [isPhoneNumberMatchCompat]
+     *
+     * @param networkCountryIso Country to assume for numbers without a country code, see [getNetworkCountryIso]
+     * @return True if the phone numbers appear to be the same, false otherwise
+     */
+    fun isSamePhoneNumber(phoneNumber1: String, phoneNumber2: String, networkCountryIso: String): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PhoneNumberUtils.areSamePhoneNumber(phoneNumber1, phoneNumber2, networkCountryIso)
+        } else {
+            isPhoneNumberMatchCompat(phoneNumber1, phoneNumber2)
         }
+    }
+
+    /**
+     * Do some basic fuzzy matching on two phone numbers to determine whether they match
+     *
+     * This is similar but not identical to SmsHelper::isPhoneNumberMatch in the C++ implementation
+     *
+     * @return True if the phone numbers appear to be the same, false otherwise
+     */
+    @VisibleForTesting
+    internal fun isPhoneNumberMatchCompat(phoneNumber1: String, phoneNumber2: String): Boolean { // Delete me when minSdk >= 31
+        val mPhoneNumber = canonicalizePhoneNumber(phoneNumber1)
+        val oPhoneNumber = canonicalizePhoneNumber(phoneNumber2)
+
+        if (mPhoneNumber.isEmpty() || oPhoneNumber.isEmpty()) {
+            // The empty string is not a valid phone number so does not match anything
+            return false
+        }
+
+        // To decide if a phone number matches:
+        // 1. Are they similar lengths? If two numbers are very different, probably one is junk data and should be ignored
+        // 2. Is one a superset of the other? Phone number digits get more specific the further towards the end of the string,
+        //    so if one phone number ends with the other, it is probably just a more-complete version of the same thing
+        val longerNumber = if (mPhoneNumber.length >= oPhoneNumber.length) mPhoneNumber else oPhoneNumber
+        val shorterNumber = if (mPhoneNumber.length < oPhoneNumber.length) mPhoneNumber else oPhoneNumber
+
+        // If the numbers are vastly different in length, assume they are not the same
+        if (shorterNumber.length < 0.75 * longerNumber.length) {
+            return false
+        }
+
+        return longerNumber.endsWith(shorterNumber)
     }
 }

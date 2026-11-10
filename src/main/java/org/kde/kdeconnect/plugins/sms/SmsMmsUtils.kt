@@ -126,7 +126,8 @@ object SmsMmsUtils {
             // If the message is going to more than one target (to allow the user to send a message to themselves)
             if (addressList.size > 1) {
                 // Remove the user's phone number if present in the list of recipients
-                addressList.removeIf { address -> sendingPhoneNumber.isMatchingPhoneNumber(address.getAddress()) }
+                val networkCountryIso = TelephonyHelper.getNetworkCountryIso(context)
+                addressList.removeIf { address -> TelephonyHelper.isSamePhoneNumber(sendingPhoneNumber.number, address.address, networkCountryIso) }
             }
         }
 
@@ -135,7 +136,7 @@ object SmsMmsUtils {
 
             val transaction = Transaction(context, settings)
 
-            val addresses: Array<String> = addressList.map(SMSHelper.Address::getAddress).toTypedArray()
+            val addresses: Array<String> = addressList.map(SMSHelper.Address::address).toTypedArray()
             val message = Message(textMessage, addresses)
 
             // If there are any attachment files add those into the message
@@ -325,11 +326,11 @@ object SmsMmsUtils {
      * Returns the Address of the sender of the MMS message.
      * @return sender's Address
      */
-    fun getMmsFrom(context: Context, msg: MultimediaMessagePdu?): SMSHelper.Address? {
+    fun getMmsFrom(msg: MultimediaMessagePdu?): SMSHelper.Address? {
         if (msg == null) {
             return null
         }
-        return SMSHelper.Address(context, msg.from.string)
+        return SMSHelper.Address(msg.from.string)
     }
 
     /**
@@ -368,11 +369,12 @@ object SmsMmsUtils {
         val numbers = phoneNumbers.split(", ").dropLastWhile { it.isEmpty() }.toTypedArray()
 
         val uniqueNumbers = mutableListOf<SMSHelper.Address>()
+        val networkCountryIso = TelephonyHelper.getNetworkCountryIso(context)
 
         for (number in numbers) {
-            val duplicate = uniqueNumbers.any { uniqueNumber -> uniqueNumber.getAddress() == number.trim { it <= ' ' } }
-            if (!duplicate) {
-                uniqueNumbers.add(SMSHelper.Address(context, number.trim { it <= ' ' }))
+            val address = SMSHelper.Address(number.trim { it <= ' ' })
+            if (uniqueNumbers.none { TelephonyHelper.isSamePhoneNumber(it.address, address.address, networkCountryIso) }) {
+                uniqueNumbers.add(address)
             }
         }
 

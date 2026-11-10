@@ -14,6 +14,9 @@ import android.os.StrictMode.ThreadPolicy
 import android.os.StrictMode.VmPolicy
 import android.util.Log
 import androidx.annotation.WorkerThread
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.kde.kdeconnect.PairingHandler.PairingCallback
 import org.kde.kdeconnect.backends.BaseLink
 import org.kde.kdeconnect.backends.BaseLinkProvider.ConnectionReceiver
@@ -127,6 +130,13 @@ class KdeConnect : Application() {
         return device?.getPlugin(pluginClass)
     }
 
+    // To be triggered when new permissions are accepted
+    fun reloadAllDevicePlugins() {
+        CoroutineScope(Dispatchers.IO).launch {
+            devices.values.forEach(Device::reloadPluginsFromSettings)
+        }
+    }
+
     private fun loadRememberedDevicesFromSettings() {
         // Log.e("BackgroundService", "Loading remembered trusted devices")
         val trustedDevices = TrustedDevices.getAllTrustedDevices(this)
@@ -229,15 +239,15 @@ class KdeConnect : Application() {
         //       deleting devices from the map is actually counterproductive because each time we
         //       detect the same device, a new Device object will be created (and leaked again).
         Log.i("KdeConnect", "Scheduled for deletion: $device, paired: ${device.isPaired}, reachable: ${device.isReachable}")
-        ThreadHelper.execute {
+        ThreadHelper.runOnNewThread {
             try {Thread.sleep(1000)} catch (_: InterruptedException) { }
             if (device.isReachable) {
                 Log.i("KdeConnect", "Not deleting device since it's reachable again: $device")
-                return@execute
+                return@runOnNewThread
             }
             if (device.isPaired) {
                 Log.i("KdeConnect", "Not deleting device since it's still paired: $device")
-                return@execute
+                return@runOnNewThread
             }
             Log.i("KdeConnect", "Deleting unpaired and unreachable device: $device")
             device.removePairingCallback(devicePairingCallback)

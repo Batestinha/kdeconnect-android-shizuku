@@ -19,14 +19,11 @@ import android.os.Handler
 import androidx.annotation.RequiresApi
 import androidx.annotation.WorkerThread
 import androidx.core.content.ContextCompat
-import com.klinker.android.logger.Log
 import com.klinker.android.send_message.Transaction
-import org.json.JSONArray
-import org.json.JSONException
-import org.json.JSONObject
+import kotlinx.serialization.json.JsonArray
 import org.kde.kdeconnect.NetworkPacket
 import org.kde.kdeconnect.helpers.SMSHelper
-import org.kde.kdeconnect.helpers.SMSHelper.MessageLooper.Companion.getLooper
+import org.kde.kdeconnect.helpers.SMSHelper.MessageLooper
 import org.kde.kdeconnect.helpers.SMSHelper.ThreadID
 import org.kde.kdeconnect.helpers.SMSHelper.getConversations
 import org.kde.kdeconnect.helpers.SMSHelper.getMessagesInRange
@@ -34,7 +31,7 @@ import org.kde.kdeconnect.helpers.SMSHelper.getMessagesInThread
 import org.kde.kdeconnect.helpers.SMSHelper.getNewestMessageTimestamp
 import org.kde.kdeconnect.helpers.SMSHelper.jsonArrayToAddressList
 import org.kde.kdeconnect.helpers.SMSHelper.jsonArrayToAttachmentsList
-import org.kde.kdeconnect.helpers.ThreadHelper.execute
+import org.kde.kdeconnect.helpers.ThreadHelper
 import org.kde.kdeconnect.plugins.Plugin
 import org.kde.kdeconnect.plugins.PluginFactory.LoadablePlugin
 import org.kde.kdeconnect.plugins.sms.SmsMmsUtils.partIdToMessageAttachmentPacket
@@ -97,7 +94,8 @@ class SMSPlugin : Plugin() {
         }
     }
 
-    private val messageObserver: ContentObserver = MessageContentObserver(Handler(getLooper()!!))
+    // Lazy so we don't start a thread in the constructor
+    private val messageObserver: ContentObserver by lazy { MessageContentObserver(MessageLooper.handler) }
 
 
     /**
@@ -141,7 +139,7 @@ class SMSPlugin : Plugin() {
     override fun onCreate() {
         val refreshFilter = IntentFilter(Transaction.REFRESH)
         refreshFilter.priority = 500
-        context.registerReceiver(messagesUpdateReceiver, refreshFilter, ContextCompat.RECEIVER_EXPORTED)
+        ContextCompat.registerReceiver(context, messagesUpdateReceiver, refreshFilter, ContextCompat.RECEIVER_EXPORTED)
 
         context.contentResolver.registerContentObserver(SMSHelper.mConversationUri, true, messageObserver)
 
@@ -165,13 +163,13 @@ class SMSPlugin : Plugin() {
 
     override fun onPacketReceived(np: NetworkPacket): Boolean = when (np.type) {
         PACKET_TYPE_SMS_REQUEST_CONVERSATIONS -> {
-            execute {
+            ThreadHelper.runOnNewThread {
                 this.handleRequestAllConversations(np)
             }
             true
         }
         PACKET_TYPE_SMS_REQUEST_CONVERSATION -> {
-            execute {
+            ThreadHelper.runOnNewThread {
                 this.handleRequestSingleConversation(np)
             }
             true
@@ -180,14 +178,14 @@ class SMSPlugin : Plugin() {
             val textMessage: String = np.getString("messageBody")
             val subID = np.getLong("subID", -1)
 
-            val jsonAddressList = np.getJSONArray("addresses")
+            val jsonAddressList = np.getJsonArray("addresses")
             val addressList = if (jsonAddressList == null) {
                 // If jsonAddressList is null, then the SMS_REQUEST packet is most probably from the older version of the desktop app.
-                listOf(SMSHelper.Address(context, np.getString("phoneNumber")))
+                listOf(SMSHelper.Address(np.getString("phoneNumber")))
             } else {
-                jsonArrayToAddressList(context, jsonAddressList)
+                jsonArrayToAddressList(jsonAddressList)
             }
-            val attachedFiles: List<SMSHelper.Attachment> = jsonArrayToAttachmentsList(np.getJSONArray("attachments"))
+            val attachedFiles: List<SMSHelper.Attachment> = jsonArrayToAttachmentsList(np.getJsonArray("attachments"))
 
             sendMessage(context, textMessage, attachedFiles, addressList.toMutableList(), subID.toInt())
 
@@ -248,7 +246,9 @@ class SMSPlugin : Plugin() {
         return true
     }
 
-    override fun hasSettings(): Boolean = true
+    override val hasSettings: Boolean = true
+
+    override val settingsScope = SettingsScope.APP_WIDE
 
     override fun getSettingsFragment(activity: Activity): PluginSettingsFragment {
         return PluginSettingsFragment.newInstance(pluginKey, device.deviceId, R.xml.smsplugin_preferences)
@@ -401,19 +401,7 @@ class SMSPlugin : Plugin() {
         private fun constructBulkMessagePacket(messages: Iterable<SMSHelper.Message>): NetworkPacket {
             val reply = NetworkPacket(PACKET_TYPE_SMS_MESSAGE)
 
-            val body = JSONArray()
-
-            for (message: SMSHelper.Message in messages) {
-                try {
-                    val json: JSONObject = message.toJSONObject()
-
-                    body.put(json)
-                } catch (e: JSONException) {
-                    Log.e("Conversations", "Error serializing message", e)
-                }
-            }
-
-            reply["messages"] = body
+            reply["messages"] = JsonArray(messages.map { it.toJsonObject() })
             reply["version"] = SMS_MESSAGE_PACKET_VERSION
 
             return reply

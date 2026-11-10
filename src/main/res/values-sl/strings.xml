@@ -64,6 +64,7 @@
   <string name="open_mousepad">Oddaljeni input</string>
   <string name="open_mousepad_tv">TV daljinec</string>
   <string name="mousepad_info">Premaknite prst po zaslonu da bi premikali miško. Tapnite za klik in uporabite dva/tri prste za desni in srednji gumb. Za pomikanje uporabite dva prsta. Uporabite dolg pritisk za povleci in spusti. Žiroskopsko zmožnost miške lahko omogočite iz nastavitve vtičnika</string>
+  <string name="mousepad_info_double_tap">Premaknite prst po zaslonu da bi premikali miško. Dotaknite za klik in uporabite dva/tri prste za desni in srednji gumb. Za pomikanje uporabite dva prsta. Dvakratni dotik za povleci in spusti. Žiroskopsko zmožnost miške lahko omogočite iz nastavitve vtičnika</string>
   <string name="mousepad_info_no_gestures">Premaknite prst po zaslonu, da premaknete kazalec miške, tapnite za klik.</string>
   <string name="mousepad_keyboard_input_not_supported">Vnos s tipkovnice ni podprt na sparjeni napravi</string>
   <string name="mousepad_single_tap_settings_title">Nastavite akcijo tapkanja enega prsta</string>
@@ -252,7 +253,6 @@
   <string name="share_destination_folder_preference">Ciljni imenik</string>
   <string name="share">Deli</string>
   <string name="share_received_file">Deli \"%s\"</string>
-  <string name="title_activity_notification_filter">Filter obvestil</string>
   <string name="filter_apps_info">Obvestila bodo usklajena za izbrane aplikacije.</string>
   <string name="show_notification_if_screen_off">Pošlji obvestila le, če je zaslon izključen</string>
   <string name="add_device_dialog_title">Dodaj napravo</string>
@@ -271,6 +271,7 @@
   <string name="sftp_saf_permission_explanation">Za dostop do datotek na daljavo morate nastaviti lokacije za shranjevanje</string>
   <string name="sftp_manage_storage_permission_explanation">Da bi dovolili oddaljeni dostop do datotek na tej napravi, morate dovoliti, da KDE Connect upravlja s hrambo.</string>
   <string name="sftp_missing_permission_error">Manjkajoča dovoljenja: dostop do datotečnega sistema</string>
+  <string name="sftp_could_not_determine_ip">Ni bilo mogoče določiti lokalnega IP naslova</string>
   <string name="no_players_connected">Ni najdenih predvajalnikov</string>
   <string name="send_files">Pošlji datoteke</string>
   <string name="use_digitizer">Uporabi kot risalno tablico</string>
@@ -322,7 +323,7 @@
   <string name="contacts_per_device_confirmation">Vaši telefonski stiki bodo prekopirani na to napravo, da jih lahko uporablja KDE Connect SMS in druge aplikacije.</string>
   <string name="select_ringtone">Izberite melodijo zvonjenja</string>
   <string name="telephony_pref_blocked_title">Blokirane številke</string>
-  <string name="telephony_pref_blocked_dialog_desc">Ne prikazuj klicev in SMS s teh številk. Navedite po eno telefonsko številko v vsaki vrsti</string>
+  <string name="telephony_pref_blocked_dialog_desc">Ne prikazuj klicev s teh številk. Navedite po eno številko na vrstico</string>
   <string name="mpris_coverart_description">Naslovnica trenutnega medija</string>
   <string name="settings_icon_description">Ikona nastavitev</string>
   <string name="presenter_fullscreen">Polni zaslon</string>
@@ -349,6 +350,7 @@
   <string name="runcommand_notpaired">Naprava ni uparjena</string>
   <string name="runcommand_nosuchdevice">Ni take naprave</string>
   <string name="runcommand_noruncommandplugin">Ta naprava nima omogočenega vtičnika za zagonski ukaz</string>
+  <string name="runcommand_widget_no_device">Kliknite na naslov, da izberete napravo.</string>
   <string name="runcommand_category_device_controls_title">Nadzor naprave</string>
   <string name="runcommand_device_controls_summary">Če vaša naprava podpira nadzor naprave, se tam prikažejo ukazi, ki ste jih konfigurirali.</string>
   <string name="set_runcommand_name_as_title">nastavi_ukaz_ime_kot_naslov</string>
