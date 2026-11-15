@@ -321,9 +321,9 @@ class ClipboardListener {
             ComponentName(context, ClipboardMonitorUserService::class.java)
         )
             .daemon(false)
-            .tag("clipboard_monitor_v4")
-            .processNameSuffix("clipboard_monitor_v4")
-            .version(4)
+            .tag("clipboard_monitor_v5")
+            .processNameSuffix("clipboard_monitor_v5")
+            .version(5)
             .debuggable(BuildConfig.DEBUG)
     }
 
